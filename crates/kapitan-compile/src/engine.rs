@@ -21,6 +21,10 @@ use crate::plan::TargetPlan;
 use crate::python::{PythonCmd, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
 
+/// Name prefix of the per-run staging directory inside `compiled/`. A full
+/// run's cleanup removes any left behind by a crashed process.
+const STAGING_PREFIX: &str = ".kapitan2-staging-";
+
 /// How targets are compiled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
@@ -352,9 +356,11 @@ pub fn compile(
             })
             .collect();
 
-        // 3. Workers.
-        let temp_root = std::env::temp_dir().join(format!(
-            "kapitan-compile-{}-{}",
+        // 3. Workers. Outputs are staged inside `compiled/` so the install is
+        // a rename on the same filesystem, never a copy (the system temp dir
+        // is usually another mount, or tmpfs).
+        let temp_root = compiled_dir.join(format!(
+            "{STAGING_PREFIX}{}-{}",
             std::process::id(),
             start.elapsed().as_nanos()
         ));
@@ -435,11 +441,15 @@ pub fn compile(
         let _ = std::fs::remove_dir_all(&temp_root);
         outcomes.extend(results.lock().drain(..));
         let manifest = manifest.lock();
-        manifest.save(&manifest_path).map_err(|e| e.to_string())?;
+        manifest
+            .save(&manifest_path)
+            .map_err(|e| format!("cannot save manifest {}: {e}", manifest_path.display()))?;
     } else if manifest.engine != engine || !manifest_path.exists() {
         manifest.engine = engine.clone();
         manifest.version = MANIFEST_VERSION;
-        manifest.save(&manifest_path).map_err(|e| e.to_string())?;
+        manifest
+            .save(&manifest_path)
+            .map_err(|e| format!("cannot save manifest {}: {e}", manifest_path.display()))?;
     }
 
     // 4. Full runs drop output of targets that no longer exist.
@@ -453,7 +463,9 @@ pub fn compile(
             .targets
             .retain(|name, _| all_digests.contains_key(name));
         manifest.prune_files();
-        manifest.save(&manifest_path).map_err(|e| e.to_string())?;
+        manifest
+            .save(&manifest_path)
+            .map_err(|e| format!("cannot save manifest {}: {e}", manifest_path.display()))?;
     }
 
     outcomes.sort_by(|a, b| a.target.cmp(&b.target));
@@ -771,7 +783,15 @@ fn install_and_record(
     let children = child_names(&plan.target_path, ctx.target_paths);
     install(temp_target, &final_dir, &children)
         .map_err(|e| format!("cannot install output: {e}"))?;
-    let output_digest = Digests::new().tree(&final_dir, &children);
+    // Files the items already fingerprinted while writing keep that
+    // fingerprint at their installed path; only the rest are read back.
+    let outputs = Digests::new();
+    for item in &items {
+        for (rel, fp) in &item.outputs {
+            outputs.seed(ctx.compiled_dir.join(rel), fp.clone());
+        }
+    }
+    let output_digest = outputs.tree(&final_dir, &children);
 
     let root = &ctx.opts.repo_root;
     let mut deps: BTreeMap<String, String> = BTreeMap::new();
@@ -909,7 +929,7 @@ fn install(temp_target: &Path, final_dir: &Path, children: &[String]) -> std::io
     for entry in std::fs::read_dir(final_dir)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if children.contains(&name) || name == MANIFEST_FILE {
+        if children.contains(&name) || name == MANIFEST_FILE || name.starts_with(STAGING_PREFIX) {
             continue;
         }
         let p = entry.path();

@@ -8,6 +8,7 @@ use kapitan_inventory::emit::yaml::{DumpOptions, dump_yaml, dump_yaml_all};
 use kapitan_inventory::emit::{MultilineStyle, dumps_pretty};
 use kapitan_inventory::{Node, Value};
 
+use crate::digest::{Digests, Fingerprint};
 use crate::inputs::Reads;
 use crate::refs::{RefController, TargetSecrets};
 
@@ -98,8 +99,8 @@ impl Writer<'_> {
     }
 
     /// `to_file`: `file_path` has no extension yet; the output type decides
-    /// it. Returns the path written (or `None` when kapitan would skip an
-    /// empty document).
+    /// it. Returns the path written and its content fingerprint (or `None`
+    /// when kapitan would skip an empty document).
     pub fn to_file(
         &self,
         output_type: OutputType,
@@ -108,7 +109,7 @@ impl Writer<'_> {
         file_path: &Path,
         mut content: Value,
         reads: &mut Reads,
-    ) -> Result<Option<PathBuf>, String> {
+    ) -> Result<Option<(PathBuf, Fingerprint)>, String> {
         if prune {
             content = prune_empty(content).unwrap_or(Value::Null);
         }
@@ -161,8 +162,10 @@ impl Writer<'_> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
+        // Hashed from memory: a fresh file written this way has no exec bit.
+        let fingerprint = Digests::of_bytes(false, text.as_bytes());
         std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
-        Ok(Some(path))
+        Ok(Some((path, fingerprint)))
     }
 
     /// `write_yaml`: a list at the top becomes a multi-document stream.
