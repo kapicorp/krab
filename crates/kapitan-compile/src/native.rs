@@ -216,11 +216,8 @@ impl NativeCompiler {
                                         Value::from(value),
                                         &mut item_reads,
                                     )?;
-                                    if let Some(path) = written {
-                                        outputs.insert(
-                                            relative(&path, compile_root),
-                                            Digests::new().fingerprint(&path),
-                                        );
+                                    if let Some((path, fingerprint)) = written {
+                                        outputs.insert(relative(&path, compile_root), fingerprint);
                                     }
                                 }
                             }
@@ -376,7 +373,12 @@ fn restore_outputs(
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        std::fs::copy(&from, &to).map_err(|e| format!("cannot reuse {}: {e}", from.display()))?;
+        // The staging tree lives next to `compiled/`, so a hard link is
+        // enough: install later renames it back over the original.
+        if std::fs::hard_link(&from, &to).is_err() {
+            std::fs::copy(&from, &to)
+                .map_err(|e| format!("cannot reuse {}: {e}", from.display()))?;
+        }
     }
     Ok(())
 }

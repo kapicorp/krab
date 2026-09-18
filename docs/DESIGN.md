@@ -221,9 +221,15 @@ grid, a change to a parameter no generator reads recompiles a chart-heavy
 cluster target in 0.14 s instead of 10 s. `--force` disables reuse.
 
 Execution: stale targets are compiled on a thread pool (one per CPU), each
-into a private temporary tree that then replaces `compiled/<target path>`
-while leaving nested targets' directories alone. Full runs remove output
-directories that belong to no target.
+into a private staging tree under `compiled/.kapitan2-staging-<pid>-<n>/`
+that then replaces `compiled/<target path>` while leaving nested targets'
+directories alone. Staging inside `compiled/` keeps the install on one
+filesystem, so it is a rename per entry rather than a copy (the system temp
+directory is usually another mount); reused kadet outputs are hard-linked
+into the staging tree, and files the writer produced keep the fingerprint
+hashed from memory instead of being read back. Full runs remove output
+directories that belong to no target, including staging trees a crashed
+run left behind.
 
 ### Native input types (`kapitan-compile/src/inputs`, `output.rs`, `refs/`)
 

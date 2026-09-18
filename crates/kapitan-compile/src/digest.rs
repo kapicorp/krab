@@ -19,6 +19,20 @@ impl Digests {
         Self::default()
     }
 
+    /// Record a fingerprint known from elsewhere (the bytes just written),
+    /// so `fingerprint` and `tree` need not read the file back.
+    pub fn seed(&self, path: PathBuf, fp: Fingerprint) {
+        self.memo.lock().insert(path, fp);
+    }
+
+    /// Fingerprint a regular file would get with this content and exec bit.
+    pub fn of_bytes(exec: bool, bytes: &[u8]) -> Fingerprint {
+        let mut h = blake3::Hasher::new();
+        h.update(if exec { b"x" } else { b"-" });
+        h.update(bytes);
+        format!("f:{}", h.finalize().to_hex())
+    }
+
     /// Fingerprint of whatever is at `path` now (file, directory or nothing).
     pub fn fingerprint(&self, path: &Path) -> Fingerprint {
         if let Some(f) = self.memo.lock().get(path) {
@@ -73,16 +87,15 @@ fn compute(path: &Path) -> Fingerprint {
     let Ok(bytes) = std::fs::read(path) else {
         return "-".into();
     };
-    let mut h = blake3::Hasher::new();
+    // Only the executable bit matters for outputs (jinja2 preserves it).
     #[cfg(unix)]
-    {
+    let exec = {
         use std::os::unix::fs::PermissionsExt;
-        // Only the executable bit matters for outputs (jinja2 preserves it).
-        let exec = meta.permissions().mode() & 0o111 != 0;
-        h.update(if exec { b"x" } else { b"-" });
-    }
-    h.update(&bytes);
-    format!("f:{}", h.finalize().to_hex())
+        meta.permissions().mode() & 0o111 != 0
+    };
+    #[cfg(not(unix))]
+    let exec = false;
+    Digests::of_bytes(exec, &bytes)
 }
 
 fn collect(root: &Path, dir: &Path, skip: &[String], out: &mut Vec<String>) {
