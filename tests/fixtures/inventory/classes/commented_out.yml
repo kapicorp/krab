@@ -1,0 +1,5 @@
+# What a class list left behind by commenting its entries out looks like. The
+# reference reads `classes` with `or []`, so every falsy value means no classes.
+classes: {}
+parameters:
+  from_empty_mapping: true
