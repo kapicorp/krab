@@ -1245,8 +1245,27 @@ mod tests {
         assert!(!unpack_file(&zf, &dir.join("out5"), Some("text/plain")).unwrap());
     }
 
+    /// git for the fixture repositories, with the user's configuration out of
+    /// the way: `tag.gpgsign` turns `git tag v1` into an annotated tag that
+    /// wants a message, `commit.gpgsign` needs a usable key and
+    /// `init.templatedir` copies hooks into every repository built here. The
+    /// production helper keeps that configuration, which real fetches need for
+    /// credentials and `url.*.insteadOf`.
     fn git_ok(args: &[&str], cwd: &Path) {
-        git(args, Some(cwd)).unwrap_or_else(|e| panic!("git {args:?}: {e}"));
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap_or_else(|e| panic!("git {args:?}: cannot run git: {e}"));
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
 
     fn make_repo(dir: &Path) -> String {
