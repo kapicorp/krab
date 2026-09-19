@@ -1,0 +1,9 @@
+# A base block whose accessors are written as deferred interpolations, the way
+# a component template does it: the value is copied into every component and
+# has to keep naming the class it was written in.
+parameters:
+  base_component:
+    component_name: \${parentkey:}
+    own_key: \${key:}
+    full_key: \${fullkey:}
+    ns: base-ns
