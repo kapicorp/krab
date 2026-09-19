@@ -201,7 +201,7 @@ The daemon is started automatically by the commands above; these manage it.
 |---|---|
 | `server status` | every server running for this inventory (any build): version, pid, binary, socket, log, resolver sources, whether it is still rendering, targets rendered and failing, generation, uptime and idle timeout. `--json` prints them as a list |
 | `server stop` | stop them all |
-| `server logs` | print its log file |
+| `server logs [-n, --lines <N>]` | print the last `N` lines of its log file (default 50) |
 | `server start` | start one detached (no-op when one runs) |
 | `server run [--idle-timeout <SECS>]` | run in the foreground; this is what `start` launches. Default idle timeout 1800 s |
 

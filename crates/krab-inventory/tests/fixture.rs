@@ -44,6 +44,25 @@ fn renders_like_the_reference() {
         checked += 1;
     }
     assert!(checked >= 3, "expected fixtures present");
+
+    // The loop above catches an expected file with no target behind it. The
+    // other direction is the one that goes quiet: a target added without its
+    // expected output is never compared against the reference at all.
+    let undocumented: Vec<&String> = report
+        .targets
+        .keys()
+        .filter(|name| {
+            !fixtures()
+                .join("expected")
+                .join(format!("{name}.yaml"))
+                .exists()
+        })
+        .collect();
+    assert!(
+        undocumented.is_empty(),
+        "fixture targets with no tests/fixtures/expected/<name>.yaml: {undocumented:?}\n\
+         Regenerate with the reference implementation (tests/fixtures/README.md)."
+    );
 }
 
 #[test]
