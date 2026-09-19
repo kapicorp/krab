@@ -34,6 +34,10 @@ stops every build's daemon for the inventory).
   output and the recorded dependencies. It needs a `python3` with `kadet`
   and `jinja2` importable and skips otherwise. Extend the fixture when you
   add to the package's API.
+* `crates/krab/tests/readme_version.rs` checks that the install snippet in
+  `README.md` names the version in the manifest, so the `curl` in it cannot
+  go stale. It is the only version string in the documentation that has to
+  be kept in step by hand.
 * The corpus test (`crates/krab-inventory/tests/corpus.rs`) checks the
   emitters against a directory of compiled files written by the reference
   implementation. It runs only when `KRAB_CORPUS` and `KRAB_COMPILED`
@@ -83,11 +87,14 @@ kept as a workflow artifact). The corpus test does not run there; it needs
 a real inventory and the reference implementation.
 
 To release, bump `version` in the workspace `Cargo.toml` (and the extension's
-`package.json` when it changed), merge, then tag `main`:
+`package.json` when it changed) and the install snippet in `README.md` with
+it, merge, then tag `main`:
 
 ```sh
-git tag v2.0.0-alpha.4
-git push origin v2.0.0-alpha.4
+version=$(cargo metadata --no-deps --format-version 1 \
+  | jq -r '.packages[] | select(.name == "krab") | .version')
+git tag "v$version"
+git push origin "v$version"
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
