@@ -248,8 +248,8 @@ directories that belong to no target.
   state, and importing any other `kapitan.*` module is an error rather than
   a fall-through to an installed kapitan. The interpreter therefore only
   needs `kadet` (and `jinja2` for templates), not the Python kapitan.
-  `HelmChart`
-  renders inside a component go through the host: mid-evaluation the runner
+  `HelmChart` renders inside a component go through the host: mid-evaluation
+  the runner
   sends a `helm` request on its stdout (`worker.rs` answers host requests
   between the eval request and its reply) and `inputs/helm.rs` builds the
   `helm template` arguments the way kapitan's `render_chart` does, hashes
