@@ -1,0 +1,45 @@
+# cargo-deny: what krab is allowed to depend on.
+#
+# .github/workflows/ci.yml runs `licenses`, `bans` and `sources` as hard
+# failures and `advisories` as a soft one, so an advisory published overnight
+# reports on an unrelated pull request instead of blocking it.
+
+[graph]
+all-features = true
+
+[licenses]
+# Every licence currently in the tree. krab ships as an Apache-2.0 binary, so
+# a new dependency under anything else is a decision, not an accident.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# krab's own crates depend on each other by path and carry no version, which
+# reads as a wildcard. They are not published, so there is nothing to pin.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[advisories]
+# Reported, never a merge blocker. `ignore` is for an advisory that has been
+# read and accepted; each entry says why and when it was looked at.
+ignore = []

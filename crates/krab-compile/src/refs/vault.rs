@@ -658,6 +658,7 @@ mod tests {
         assert_eq!(revealed.len(), 6);
         assert!(revealed.chars().all(|c| c.is_ascii_digit()));
         // Wrong token: authentication error.
+        // SAFETY: the test process sets this once, before any client connects.
         unsafe { std::env::set_var("VAULT_TOKEN", "bad") };
         let rc2 = RefController::new(dir.clone(), false);
         let err = rc2.reveal_str(&out, &mut reads).unwrap_err().0;

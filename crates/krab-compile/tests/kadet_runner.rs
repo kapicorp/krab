@@ -1,6 +1,9 @@
 //! Evaluates the fixture kadet component through the evaluator and its
 //! bundled `kapitan` package: needs a `python3` with `kadet` and `jinja2`
 //! importable, and skips otherwise.
+// A skipped test that says nothing looks like a passing one, so these report
+// why they did not run.
+#![allow(clippy::print_stderr)]
 
 use std::path::PathBuf;
 use std::process::Command;

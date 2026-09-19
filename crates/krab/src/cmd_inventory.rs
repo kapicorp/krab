@@ -72,7 +72,7 @@ pub enum InventoryCommand {
     Explain {
         #[arg(short = 't', long = "target-name", add = clap_complete::ArgValueCompleter::new(complete_target))]
         target: String,
-        /// Path inside `parameters`, e.g. cluster.name or kapitan.compile[0].name
+        /// Path inside `parameters`, e.g. `cluster.name` or `kapitan.compile[0].name`
         path: String,
     },
     /// Render every target and report problems

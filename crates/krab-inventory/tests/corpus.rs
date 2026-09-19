@@ -3,6 +3,9 @@
 //! a file that kapitan 0.36 wrote; the original file must be reproduced.
 //! Skipped unless `KRAB_CORPUS` (the JSON dir) and `KRAB_COMPILED`
 //! (the compiled dir) are set.
+// A skipped test that says nothing looks like a passing one, so these report
+// why they did not run.
+#![allow(clippy::print_stderr)]
 
 use std::path::{Path, PathBuf};
 

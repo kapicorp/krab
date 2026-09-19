@@ -1,6 +1,6 @@
-# Checks every pull request and every push to main: formatting, clippy,
-# the unit and fixture tests (the Python resolver tests need python3), and
-# that the VS Code extension still packages.
+# Checks every pull request and every push to main: formatting and clippy,
+# the unit and fixture tests on Linux and macOS (the Python resolver tests
+# need python3), and that the VS Code extension still packages.
 name: CI
 
 on:
@@ -8,50 +8,222 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
+# A new push to a pull request makes the run in flight pointless. Runs on main
+# are not cancelled: they are what the cache is saved from.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+  # Not RUSTFLAGS: that is part of the build fingerprint and of the cache key,
+  # so setting it there costs a full rebuild and a cache miss on every run.
+  # build.warnings does the same job without either (Cargo 1.97 and newer).
+  CARGO_BUILD_WARNINGS: deny
 
 jobs:
-  rust:
-    name: Rust
+  lint:
+    name: Format and clippy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      # This action publishes no tags and normally takes the toolchain from
+      # the ref, so a pinned commit has to name it.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      # The Python resolver tests run a user resolvers.py in python3; PyYAML
-      # and omegaconf make the fixture parity test run against the real package.
-      # kadet and jinja2 let the kadet evaluator test run.
-      - uses: actions/setup-python@v5
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          python-version: "3.12"
-      - run: pip install pyyaml omegaconf kadet jinja2
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --locked
+
+  test:
+    # krab holds a unix socket, spawns python3, watches the filesystem and
+    # builds paths by hand. Releases ship macOS binaries, so macOS is tested.
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The Python resolver tests run a user resolvers.py in python3; PyYAML
+      # and omegaconf make the fixture parity test run against the real package.
+      # kadet and jinja2 let the kadet evaluator test run. omegaconf is held
+      # at the version the reference implementation needs, so this job and the
+      # parity job exercise the same one.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
       - run: cargo test --locked
+
+  parity:
+    # tests/fixtures/expected is what kapitan 0.36.3 prints. Regenerating it
+    # here means a hand-written expectation cannot pass review.
+    name: Reference parity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      # omegaconf is pinned because kapitan 0.36.3 accepts >=2.4.0.dev3, and
+      # 2.4.0.dev15 dropped ListMergeMode, which its omegaconf backend imports.
+      - run: pip install "kapitan[omegaconf]==0.36.3" "omegaconf==2.4.0.dev3"
+      - run: python tests/fixtures/generate_expected.py
+      - name: Expected output is still what the reference prints
+        run: |
+          git add -A tests/fixtures/expected
+          git diff --cached --exit-code -- tests/fixtures/expected || {
+            echo "::error::tests/fixtures/expected no longer matches kapitan 0.36.3. Regenerate it (see tests/fixtures/README.md) and commit the result."
+            exit 1
+          }
+
+  msrv:
+    # rust-version in Cargo.toml is a promise to anyone building from source.
+    # The number is read from the manifest so it lives in exactly one place.
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # build.warnings landed in Cargo 1.97 and the oldest supported toolchain
+      # predates it. This job answers "does it compile", not "is it tidy".
+      CARGO_BUILD_WARNINGS: warn
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check on the oldest supported toolchain
+        run: |
+          msrv=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "krab") | .rust_version')
+          echo "rust-version in Cargo.toml is $msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check --locked --all-targets
+
+  deny:
+    # Licences, duplicate and wildcard dependencies, and the registries they
+    # come from. Only runs when the dependency set or the policy changed.
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: changed
+        # Through the environment, not interpolated into the script: a ref name
+        # is data, and `run:` would take it as shell source.
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --depth=1 origin "$BASE"
+          if git diff --name-only "origin/$BASE" HEAD \
+            | grep -qE '^(Cargo\.(toml|lock)|deny\.toml|crates/[^/]+/Cargo\.toml)$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Licences, bans and sources
+        if: steps.changed.outputs.run == 'true'
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check licenses bans sources
+      # An advisory published overnight is news, not a reason to block an
+      # unrelated pull request.
+      - name: Advisories
+        if: steps.changed.outputs.run == 'true'
+        continue-on-error: true
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
+
+  zizmor:
+    # Lints these workflow files: template injection into `run:`, permissions
+    # wider than a job needs, unpinned actions.
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          advanced-security: false
 
   vscode:
     name: VS Code extension
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: editors/vscode
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci
       - run: npm run package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: krab-vscode
           path: editors/vscode/*.vsix
+
+  # Branch protection cannot require a job that is conditionally skipped, and
+  # `deny` is one. Requiring this single check instead means a skipped job
+  # passes and a failed or cancelled one does not.
+  required:
+    name: CI passed
+    if: always()
+    needs: [lint, test, parity, msrv, deny, zizmor, vscode]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          if jq -e 'to_entries[] | select(.value.result != "success" and .value.result != "skipped")' <<<"$RESULTS" >/dev/null; then
+            echo "::error::a required job did not pass"
+            exit 1
+          fi

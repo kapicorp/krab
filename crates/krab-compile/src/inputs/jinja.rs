@@ -411,10 +411,10 @@ fn python_replacement(r: &str) -> String {
 fn json_indent4(v: &Value) -> String {
     let mut s = krab_inventory::emit::dumps_pretty(v, 4, false);
     // ensure_ascii=False: undo the \uXXXX escapes for non-ASCII.
-    if s.contains("\\u") {
-        if let Ok(parsed) = serde_json::from_str::<Json>(&s) {
-            s = serde_json::to_string_pretty(&parsed).unwrap_or(s);
-        }
+    if s.contains("\\u")
+        && let Ok(parsed) = serde_json::from_str::<Json>(&s)
+    {
+        s = serde_json::to_string_pretty(&parsed).unwrap_or(s);
     }
     s
 }

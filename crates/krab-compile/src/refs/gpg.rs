@@ -209,11 +209,15 @@ mod tests {
     }
 
     #[test]
+    // Saying why the test did nothing is the point; a skipped test that stays
+    // silent looks like a passing one.
+    #[allow(clippy::print_stderr)]
     fn round_trip_with_a_temporary_keyring() {
         let Some(home) = keyring() else {
             eprintln!("gpg not available; skipping");
             return;
         };
+        // SAFETY: tests in this module run single threaded with respect to GNUPGHOME.
         unsafe { std::env::set_var("GNUPGHOME", &home) };
         let recipients = vec![serde_json::json!({"name": "kapitan-test"})];
         let fps = lookup_fingerprints(&recipients).unwrap();

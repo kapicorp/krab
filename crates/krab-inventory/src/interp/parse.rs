@@ -147,7 +147,7 @@ impl Parser {
                         self.pos += n + 1;
                         continue;
                     }
-                    if n % 2 == 0 && after == Some(q) {
+                    if n.is_multiple_of(2) && after == Some(q) {
                         // QUOTED_ESC at the end of the string: unescape.
                         lit.extend(std::iter::repeat_n('\\', n / 2));
                         self.pos += n;

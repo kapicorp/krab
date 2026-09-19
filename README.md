@@ -43,7 +43,7 @@ install -m 755 krab-$version-$target/krab ~/.local/bin/krab
 
 Releases before 2.0.0-alpha.4 named the archive and the binary `kapitan`.
 
-Or build from source with Rust 1.85 or newer (edition 2024):
+Or build from source:
 
 ```sh
 git clone https://github.com/kapicorp/krab.git
