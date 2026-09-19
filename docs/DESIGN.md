@@ -38,6 +38,22 @@ reference cannot hold `datetime` values anyway); unknown tags are errors.
 A class or target file is a `ClassDoc { classes, parameters, applications,
 exports }`; `null` sections are empty, unknown top-level keys are ignored.
 
+## Target names
+
+A target is named after its file (`targets/prod/app.yml` is `app`), and
+`compose-target-name` (or the older `compile.compose-node-name`) names it after
+the path instead (`prod.app`). Off by default, as in the reference. The name is
+what `_kapitan_.name.full` / `_reclass_.name.full` report, and what the compiled
+directory follows: `compiled/app/` against `compiled/prod/app/`. `name.path`
+(`prod/app`) and `name.short` (`app`) do not depend on the setting.
+
+`TargetSpec::dotted_path` is the path spelling whether or not it is the name, so
+`-t prod.app` selects the target in both modes.
+
+Two files that end up with one name are an `inventory::conflicting_targets`
+diagnostic naming both. The reference renders nothing at all in that case, and
+says nothing (`docs/DECISIONS.md`, D7).
+
 ## Class resolution
 
 `Inventory::resolve_class_file` mirrors the reference exactly, including its

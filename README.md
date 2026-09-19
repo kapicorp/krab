@@ -80,8 +80,11 @@ krab compile --fetch                      # first fetch the dependencies that ar
 krab refs --reveal -f compiled/my/target/manifests/secret.yml
 ```
 
-Target names are the dotted path of the target file:
-`inventory/targets/platform/apps/grafana.yml` is `platform.apps.grafana`.
+A target is named after its file, whatever directory it sits in:
+`inventory/targets/platform/apps/grafana.yml` is `grafana`. Set
+`compose-target-name` to name it after the path instead
+(`platform.apps.grafana`), as the reference does. Either way the dotted path
+selects it, so `-t platform.apps.grafana` works in both.
 
 The first `krab inventory ...` starts a daemon for that inventory in the
 background. It renders every target once, watches the files, and re-renders

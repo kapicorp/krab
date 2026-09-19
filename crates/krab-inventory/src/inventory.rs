@@ -24,7 +24,9 @@ use crate::yaml;
 pub struct InventoryConfig {
     /// The inventory directory (contains `targets/` and `classes/`).
     pub root: PathBuf,
-    /// Name targets after their path (`gcp.project.foo`) instead of the file name.
+    /// Name targets after their path (`gcp.project.foo`) instead of the file
+    /// name. Off by default, as in the reference (`global.compose-target-name`,
+    /// or the older `compile.compose-node-name`).
     pub compose_target_name: bool,
     pub ignore_class_not_found: bool,
     /// Record merge and resolution history for `explain`.
@@ -39,7 +41,7 @@ impl InventoryConfig {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         InventoryConfig {
             root: root.into(),
-            compose_target_name: true,
+            compose_target_name: false,
             ignore_class_not_found: false,
             track_provenance: true,
             normalize: true,
@@ -63,6 +65,19 @@ pub struct TargetSpec {
     /// Path relative to `targets/`, with extension.
     pub path: String,
     pub file: PathBuf,
+}
+
+impl TargetSpec {
+    /// The file's path as a dotted name (`prod/app.yml` -> `prod.app`). It is
+    /// the target's name when `compose-target-name` is set, and stays usable
+    /// for selecting a target either way.
+    pub fn dotted_path(&self) -> String {
+        self.path
+            .rsplit_once('.')
+            .map(|(stem, _)| stem)
+            .unwrap_or(&self.path)
+            .replace('/', ".")
+    }
 }
 
 /// Outcome of resolving a class name: the file found (if any) and every
@@ -331,13 +346,16 @@ impl Inventory {
 
     pub fn target_spec(&self, name: &str) -> Result<TargetSpec> {
         let targets = self.discover_targets()?;
-        targets.into_iter().find(|t| t.name == name).ok_or_else(|| {
-            Error::new(
-                "inventory::unknown_target",
-                format!("target `{name}` not found"),
-            )
-            .with_help("list targets with `krab inventory targets`")
-        })
+        targets
+            .into_iter()
+            .find(|t| t.name == name || t.dotted_path() == name)
+            .ok_or_else(|| {
+                Error::new(
+                    "inventory::unknown_target",
+                    format!("target `{name}` not found"),
+                )
+                .with_help("list targets with `krab inventory targets`")
+            })
     }
 
     /// Every class file under `classes/`, with its dotted class name.
@@ -756,4 +774,75 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A throwaway inventory tree. No test-only dependency for this: the
+    /// directory is unique per test and removed when the guard drops.
+    struct Tree(PathBuf);
+
+    impl Tree {
+        fn new(label: &str, files: &[&str]) -> Tree {
+            let root =
+                std::env::temp_dir().join(format!("krab-targets-{label}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            for f in files {
+                let path = root.join("targets").join(f);
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(path, "parameters:\n  a: 1\n").unwrap();
+            }
+            std::fs::create_dir_all(root.join("classes")).unwrap();
+            Tree(root)
+        }
+
+        fn inventory(&self, compose: bool) -> Inventory {
+            let mut cfg = InventoryConfig::new(&self.0);
+            cfg.compose_target_name = compose;
+            Inventory::new(cfg, Arc::new(Registry::with_builtins()))
+        }
+
+        fn names(&self, compose: bool) -> Vec<String> {
+            let mut n: Vec<String> = self
+                .inventory(compose)
+                .discover_targets()
+                .unwrap()
+                .into_iter()
+                .map(|t| t.name)
+                .collect();
+            n.sort();
+            n
+        }
+    }
+
+    impl Drop for Tree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_target_in_a_subdirectory_is_named_after_its_file() {
+        let tree = Tree::new("subdir", &["prod/app.yml", "top.yml"]);
+        assert_eq!(tree.names(false), ["app", "top"]);
+        assert_eq!(tree.names(true), ["prod.app", "top"]);
+    }
+
+    #[test]
+    fn a_target_is_selectable_by_name_and_by_its_dotted_path() {
+        let tree = Tree::new("select", &["prod/app.yml"]);
+        let inv = tree.inventory(false);
+        assert_eq!(inv.target_spec("app").unwrap().name, "app");
+        assert_eq!(inv.target_spec("prod.app").unwrap().name, "app");
+        assert!(inv.target_spec("nope").is_err());
+    }
+
+    #[test]
+    fn two_files_with_one_name_are_reported_rather_than_rendered() {
+        let tree = Tree::new("conflict", &["a/x.yml", "b/x.yml"]);
+        let err = tree.inventory(false).discover_targets().unwrap_err();
+        assert_eq!(err.diagnostic().code, "inventory::conflicting_targets");
+    }
 }

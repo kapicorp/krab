@@ -3,16 +3,28 @@
 
 use std::path::PathBuf;
 
-use krab_inventory::Inventory;
 use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
+use krab_inventory::{Inventory, InventoryConfig};
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
+/// The expected documents are generated with `compose_target_name=True`
+/// (`tests/fixtures/generate_expected.py`), so the fixture inventory is opened
+/// the same way; the default is off, as in the reference.
+fn fixture_inventory() -> Inventory {
+    let mut cfg = InventoryConfig::new(fixtures().join("inventory"));
+    cfg.compose_target_name = true;
+    Inventory::new(
+        cfg,
+        std::sync::Arc::new(krab_inventory::resolvers::Registry::with_builtins()),
+    )
+}
+
 #[test]
 fn renders_like_the_reference() {
-    let inv = Inventory::open(fixtures().join("inventory"));
+    let inv = fixture_inventory();
     let report = inv.render_all().expect("discover targets");
     if let Some(e) = report.errors.first() {
         panic!("{e}");
@@ -48,7 +60,7 @@ fn renders_like_the_reference() {
 
 #[test]
 fn explain_reports_overrides() {
-    let inv = Inventory::open(fixtures().join("inventory"));
+    let inv = fixture_inventory();
     let target = inv.render_named("env.prod").unwrap();
     let e = krab_inventory::explain::explain(&inv, &target, "database.engine").unwrap();
     assert_eq!(e.value.py_str(), "mysql");
@@ -72,7 +84,7 @@ fn explain_reports_overrides() {
 
 #[test]
 fn single_target_render_touches_only_its_closure() {
-    let inv = Inventory::open(fixtures().join("inventory"));
+    let inv = fixture_inventory();
     let target = inv.render_named("bare").unwrap();
     let files: Vec<String> = target
         .files
