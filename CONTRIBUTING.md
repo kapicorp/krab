@@ -91,15 +91,29 @@ git push origin v2.0.0-alpha.4
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
-workspace version, builds `krab` for Linux x86_64 and aarch64 (on
-Ubuntu 22.04, so glibc 2.35 or newer) and for macOS Intel and Apple silicon,
-packages the extension, and creates the GitHub release with generated notes,
+workspace version, builds `krab` for Linux x86_64 and aarch64 (each on its
+own Ubuntu 22.04 runner, so glibc 2.35 or newer) and for macOS Intel and
+Apple silicon, packages the extension, and creates the GitHub release with
 the four `krab-<version>-<target>.tar.gz` archives, the `.vsix` and a
 `SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
 pre-release. If the release already exists (created from the GitHub UI, for
 example) the assets are uploaded to it instead. Running the workflow by hand
 from the Actions tab builds the same artifacts from any branch without
 publishing anything.
+
+The release notes come from `git-cliff`, grouped by the `area:` prefix of
+each commit (`cliff.toml`). To see what the next tag would say:
+
+```sh
+git cliff --unreleased
+```
+
+Each archive carries a build provenance attestation, so anyone can check
+which workflow and which commit produced the binary they downloaded:
+
+```sh
+gh attestation verify <the archive you downloaded> --repo kapicorp/krab
+```
 
 ## Layout and conventions
 
