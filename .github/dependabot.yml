@@ -1,0 +1,27 @@
+version: 2
+# cooldown: a version published minutes ago has had no time to be caught if
+# the release was compromised.
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "deps:"
+    labels:
+      - "area: packaging"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci:"
+    labels:
+      - "area: packaging"
+

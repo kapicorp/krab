@@ -94,8 +94,8 @@ Three sets ship: `oc.*`, kapitan's built-ins (`key`, `parentkey`, `escape`,
 `add`, `default`, …) and `contrib` (`replace`, `json`, `to_yaml`, `sha256`,
 `truncate`, `pluck`, `select_fields`, `filter_keys`, `join`, …).
 
-Boolean resolvers use Python truthiness on purpose (`${if:nonempty,…}` is
-true); a stricter mode is a planned opt-in.
+Boolean resolvers use Python truthiness, so `${if:nonempty,…}` is true
+(D6 in [DECISIONS.md](DECISIONS.md)).
 
 A fourth set comes from the user's `resolvers.py` (`resolvers/python.rs`,
 `runner/resolver_runner.py`), the file kapitan's omegaconf backend imported.
@@ -312,12 +312,9 @@ plain http and `tls_verify` disables verification or names a CA bundle
 source are an error and `media_type` filters are unioned, as in the
 reference.
 
-Two deliberate differences from the reference: a dependency whose output
-path already exists is not fetched (kapitan re-clones every git source and
-adds files that happen to be missing), which keeps `fetch: true`
-repositories offline once populated; and `force_fetch: true` on an item
-forces that item even when `--fetch` is given (kapitan only honours it
-when neither flag is set).
+A dependency whose output path already exists is not fetched, and
+`force_fetch: true` on an item forces that item even under `--fetch`
+(D4 and D5 in [DECISIONS.md](DECISIONS.md)).
 
 Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
 output. `--backend python` runs kapitan's Python input types instead.

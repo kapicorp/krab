@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/kapicorp/kapitan/discussions/new/choose
+    about: |
+      Ask a question or discuss an idea with the Kapitan community.
+  - name: Join us on Slack
+    url: https://kubernetes.slack.com/archives/C981W2HD3
+    about: |
+      The #kapitan channel on the Kubernetes Slack.

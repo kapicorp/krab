@@ -1,0 +1,82 @@
+name: Bug Report
+description: Something in krab does not work
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If krab renders or compiles something differently from the Python
+        kapitan, use the **Parity gap** template instead.
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Description of the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Commands and, where it matters, the class or target files involved.
+        A minimal inventory is more useful than a large one.
+      render: bash
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        ## Environment
+  - type: input
+    id: version
+    attributes:
+      label: Version (krab)
+      description: Output of `krab --version`, or the commit you built from.
+      placeholder: e.g. 2.0.0-alpha.4, or main at abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: daemon
+    attributes:
+      label: Daemon
+      description: Does it also happen with `--no-daemon`?
+      options:
+        - Happens both with and without the daemon
+        - Only with the daemon
+        - Only with --no-daemon
+        - Not tried
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python
+      description: |
+        Only if `kadet` components or a `resolvers.py` are involved: the
+        interpreter and how it was selected (`$KRAB_PYTHON`, `.kapitan`, the
+        venv krab built).
+  - type: input
+    id: os-information
+    attributes:
+      label: OS information
+      placeholder: e.g. Ubuntu 24.04, macOS 15, Fedora 42
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: |
+        Diagnostics as printed, or the `--json` form. `krab server logs` has
+        the daemon side.
+      render: bash

@@ -103,6 +103,8 @@ target names.
 | [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) | installing, the daemon, inspecting an inventory, compiling, editor setup |
 | [docs/CLI.md](docs/CLI.md) | every command and flag, environment variables, `.kapitan` keys |
 | [docs/DESIGN.md](docs/DESIGN.md) | the data model, the exact merge and interpolation semantics, provenance, the server protocol, how compile decides what is stale |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | where things live: crate layering, a code map per crate, the invariants that cut across them |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | every deliberate difference from the reference implementation, and why |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | current status and a pointer to the project board where planned work is tracked |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | building, testing, checking parity against the reference implementation |
 | [editors/vscode/README.md](editors/vscode/README.md) | the VS Code extension |
@@ -197,10 +199,8 @@ Rendering and compiled output are verified byte for byte against kapitan
 0.36.3 with the `omegaconf` inventory backend on the fixture inventory in
 `tests/fixtures` and on a 160-target production inventory.
 
-Deliberate differences: class cycles are reported instead of recursing
-forever; unknown YAML tags are errors; timestamps stay strings; a dependency
-whose output path already exists is not fetched at all, so a repository
-with everything in place compiles offline. Not implemented yet: `jsonnet`,
+Where krab behaves differently on purpose, the difference and its reason are
+in [docs/DECISIONS.md](docs/DECISIONS.md). Not implemented yet: `jsonnet`,
 `helm` (as a direct input type; charts rendered by kgenlib inside kadet
 work), `kustomize` and `cuelang` inputs, `toml` output, Python-defined
 jinja2 filters other than the common ones, and the `write` resolver.

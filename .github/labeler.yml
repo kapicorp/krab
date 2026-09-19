@@ -1,0 +1,34 @@
+'area: inventory':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'crates/krab-inventory/**'
+          - 'crates/krab-server/**'
+          - 'vendor/**'
+
+'area: compile':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'crates/krab-compile/**'
+
+'area: lsp':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'crates/krab-lsp/**'
+          - 'editors/**'
+          - 'scripts/lsp-smoke*.py'
+
+'area: packaging':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - 'crates/krab/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - 'README.md'
+          - 'CONTRIBUTING.md'
+          - 'SECURITY.md'

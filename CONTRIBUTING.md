@@ -1,5 +1,22 @@
 # Contributing
 
+## The cycle
+
+One issue, one branch, one PR.
+
+1. The issue carries the specification. For parity work that means what the
+   reference does, where that behaviour lives in its source, and a reproduction
+   both implementations can be run against. For a krab extension it means what
+   the behaviour should be, since no reference decides it. Open work lives on
+   the board (`docs/ROADMAP.md`).
+2. The fixture case comes first. Add it to `tests/fixtures/inventory` and
+   regenerate the expected output with the reference, so the test fails for the
+   reason the issue describes before anything is implemented.
+3. Implement, then run `cargo test --release`, plus the parity check below for
+   anything that touches the engine.
+4. A deliberate difference from the reference gets a row in
+   `docs/DECISIONS.md` in the same PR. Otherwise it is a bug.
+
 ## Build
 
 Rust 1.85 or newer. The workspace builds with no system dependencies.

@@ -1,0 +1,38 @@
+name: Idea
+description: A direction worth exploring, or a feature request
+title: "[idea]: "
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea-description
+    attributes:
+      label: What
+      description: |
+        What krab would do. Proposals for the surface (CLI flags, `.kapitan`
+        keys, inventory structure) help.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: The problem or workflow this solves.
+      placeholder: "When I try to ..., I have to work around it by ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: parity
+    attributes:
+      label: Relation to the Python kapitan
+      options:
+        - The reference does this and krab does not yet
+        - The reference does not do this; it would be a krab extension
+        - not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to contribute this

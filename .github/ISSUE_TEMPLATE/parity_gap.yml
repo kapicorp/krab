@@ -1,0 +1,81 @@
+name: Parity gap
+description: krab behaves differently from the Python kapitan
+title: "[parity]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Rendering and compiled output must be byte-identical to kapitan 0.36.3
+        with the `omegaconf` inventory backend. Deliberate differences are
+        listed in
+        [docs/DECISIONS.md](https://github.com/kapicorp/krab/blob/main/docs/DECISIONS.md);
+        check there first.
+  - type: textarea
+    id: reference-behaviour
+    attributes:
+      label: What the reference does
+      description: |
+        The behaviour of the Python kapitan, with a source: the module or
+        function (`kapitan/inventory/...`), or an upstream issue or PR.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        The inventory fragment and the commands, so that both implementations
+        can be run against it.
+      render: bash
+      value: |
+        # inventory fragment
+
+        # commands
+        kapitan inventory -t some.target > /tmp/ref.yml
+        krab inventory -t some.target > /tmp/new.yml
+        diff /tmp/ref.yml /tmp/new.yml
+    validations:
+      required: true
+  - type: textarea
+    id: krab-behaviour
+    attributes:
+      label: What krab does instead
+      description: The diff, the diagnostic, or the differing output.
+    validations:
+      required: true
+  - type: input
+    id: reference-version
+    attributes:
+      label: Reference version
+      description: The Python kapitan the comparison was run against.
+      value: "0.36.3 (omegaconf backend)"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - inventory (loading, merging, interpolation, resolvers, emitters)
+        - compile (input types, refs, dependencies, output)
+        - not sure
+    validations:
+      required: true
+  - type: input
+    id: suspected-location
+    attributes:
+      label: Suspected location in krab
+      description: Crate, file or function, if you have a candidate.
+      placeholder: e.g. crates/krab-inventory/src/merge.rs
+  - type: checkboxes
+    id: fixture
+    attributes:
+      label: Fixture coverage
+      description: |
+        `tests/fixtures/inventory` plus the reference's output in
+        `tests/fixtures/expected` is what the fixture test compares.
+      options:
+        - label: The fixture inventory already exercises this
+        - label: A new fixture case is needed
+        - label: Fixing this changes existing expected output, so it has to be regenerated
