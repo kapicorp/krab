@@ -194,6 +194,8 @@ impl Connector {
             .stdout(Stdio::from(log_file))
             .stderr(Stdio::from(err_file));
         // Detach from the terminal's session so the server outlives the CLI.
+        // SAFETY: pre_exec runs the closure in the child between fork and exec,
+        // where only async-signal-safe calls are allowed. setsid() is one.
         unsafe {
             use std::os::unix::process::CommandExt;
             cmd.pre_exec(|| {

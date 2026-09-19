@@ -7,7 +7,30 @@ version = "2.0.0-alpha.4"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/kapicorp/krab"
-rust-version = "1.85"
+rust-version = "1.90"
+# [patch.crates-io] below replaces saphyr-parser with a patched copy, and cargo
+# strips patches when packaging: a published krab-inventory would resolve against
+# the unpatched crate and silently lose the PyYAML compatibility fixes. See
+# the "Publishing" section in CONTRIBUTING.md.
+publish = false
+
+# Lints every crate inherits via `[lints] workspace = true`. This table chooses
+# which lints; CI decides how hard they bite (CARGO_BUILD_WARNINGS=deny), so a
+# working copy still builds with a warning in it.
+[workspace.lints.rustdoc]
+# A link to a renamed item silently turns into plain text otherwise.
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+get_unwrap = "warn"
+# Only the krab binary formats output; the libraries return values. main.rs
+# opts out for the whole crate.
+print_stdout = "warn"
+print_stderr = "warn"
+undocumented_unsafe_blocks = "warn"
 
 [workspace.dependencies]
 krab-inventory = { path = "crates/krab-inventory" }

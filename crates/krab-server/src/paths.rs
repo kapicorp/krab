@@ -16,6 +16,7 @@ fn runtime_dir() -> PathBuf {
     {
         return PathBuf::from(dir).join("krab");
     }
+    // SAFETY: getuid() takes no arguments, cannot fail and has no preconditions.
     let uid = unsafe { libc::getuid() };
     PathBuf::from(format!("/tmp/krab-{uid}"))
 }

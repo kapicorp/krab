@@ -1,0 +1,8 @@
+# The toolchain every contributor and every CI job builds with. rustup installs
+# it, and the components below, on the first cargo invocation in this tree.
+#
+# `rust-version` in Cargo.toml is a different number: the oldest toolchain krab
+# still compiles on, checked by the MSRV job in .github/workflows/ci.yml.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

@@ -1,5 +1,10 @@
 //! The `krab` command line.
 
+// This crate is the one that formats output, so printing is its job. The
+// workspace warns on it to keep the libraries from growing a second opinion
+// about what the user sees.
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 mod app;
 mod cmd_compile;
 mod cmd_inventory;
@@ -98,6 +103,7 @@ fn accept_old_env_names() {
 
 fn main() -> ExitCode {
     // Piping into `head` must not panic: die quietly on SIGPIPE like other CLIs.
+    // SAFETY: the start of main, before any thread is spawned.
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }

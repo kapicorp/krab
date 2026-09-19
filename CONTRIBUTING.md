@@ -2,13 +2,19 @@
 
 ## Build
 
-Rust 1.85 or newer. The workspace builds with no system dependencies.
+`rust-toolchain.toml` pins the compiler; rustup installs it, `rustfmt` and
+`clippy` on the first `cargo` command you run in the tree. The workspace
+builds with no system dependencies.
+
+`rust-version` in `Cargo.toml` is a different number: the oldest toolchain
+krab still compiles on. It is not repeated in prose anywhere, so there is
+nothing to keep in sync; cargo names the version it needs if yours is older.
 
 ```sh
 cargo build --release            # target/release/krab
-cargo fmt --all
-cargo clippy --all-targets --release
-cargo test --release
+cargo fmt --all --check
+cargo clippy --all-targets --locked
+cargo test --locked
 ```
 
 Put `target/release/krab` on your `PATH` (a symlink is fine). The name
@@ -19,7 +25,7 @@ stops every build's daemon for the inventory).
 
 ## Tests
 
-* `cargo test --release` runs the unit tests and the fixture test.
+* `cargo test --locked` runs the unit tests and the fixture test.
   `tests/fixtures/inventory` is a small inventory exercising class
   resolution, list merging, merge-time dereferencing, every shipped
   resolver, YAML 1.1 scalars and PyYAML emitter quirks;
@@ -121,3 +127,13 @@ publishing anything.
 `docs/DESIGN.md` the semantics. Open work is tracked as issues on the
 krab roadmap project board (https://github.com/orgs/kapicorp/projects/5);
 `docs/ROADMAP.md` points there.
+
+## Publishing
+
+The crates are `publish = false` and cannot go to crates.io as they stand.
+`[patch.crates-io]` replaces `saphyr-parser` with the patched copy in
+`vendor/`, and cargo strips patch sections when it packages a crate: a
+published `krab-inventory` would resolve against the unpatched crate on
+crates.io and silently lose the PyYAML compatibility fixes. `cargo install
+krab` needs the fork published under a name of its own, or the patches
+upstream, first. Releases ship prebuilt binaries, which are unaffected.

@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 krab-inventory = { workspace = true }
@@ -19,3 +20,6 @@ url = { workspace = true }
 crossbeam-channel = { workspace = true }
 parking_lot = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true

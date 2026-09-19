@@ -10,7 +10,7 @@ Nothing here changes your inventory; the only files krab writes are under
 Download the archive for your platform from the
 [releases page](https://github.com/kapicorp/krab/releases) (Linux x86_64
 and aarch64, macOS Intel and Apple silicon) and put the `krab` binary it
-contains on your `PATH`, or build from source with Rust 1.85 or newer:
+contains on your `PATH`, or build from source:
 
 ```sh
 git clone https://github.com/kapicorp/krab.git

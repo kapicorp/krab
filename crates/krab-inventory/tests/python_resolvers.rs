@@ -1,5 +1,8 @@
 //! Resolvers from a user `resolvers.py`, run through the Python worker bridge.
 //! Needs `python3`; the reference-parity test also needs the `yaml` module.
+// A skipped test that says nothing looks like a passing one, so these report
+// why they did not run.
+#![allow(clippy::print_stderr)]
 
 use std::path::PathBuf;
 use std::process::Command;

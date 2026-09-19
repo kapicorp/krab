@@ -65,10 +65,10 @@ fn registration_names(invoked: &Path, cwd: Option<&Path>) -> (String, String) {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "krab".into());
     let mut completer = invoked.to_path_buf();
-    if completer.components().count() > 1 {
-        if let Some(cwd) = cwd {
-            completer = cwd.join(completer);
-        }
+    if completer.components().count() > 1
+        && let Some(cwd) = cwd
+    {
+        completer = cwd.join(completer);
     }
     (name, completer.to_string_lossy().into_owned())
 }
