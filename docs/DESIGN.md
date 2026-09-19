@@ -79,7 +79,7 @@ evaluating every string containing `${` and writing the result back. A node
 interpolation aliasing a container resolves that container in place first and
 then copies it. Resolver results are written back verbatim, so a resolver that
 returns a string with `${` (e.g. `default`, `relpath`, `oc.dict.values`) is
-evaluated on the next pass — exactly as in the reference. Cycles and references
+evaluated on the next pass, exactly as in the reference. Cycles and references
 to an enclosing container are errors with the full chain of locations.
 
 After the passes, `${escape:x}` markers become literal `${x}`.
