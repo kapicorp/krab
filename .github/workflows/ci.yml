@@ -27,14 +27,37 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The Python resolver tests run a user resolvers.py in python3; PyYAML
       # and omegaconf make the fixture parity test run against the real package.
-      # kadet and jinja2 let the kadet evaluator test run.
+      # kadet and jinja2 let the kadet evaluator test run. omegaconf is held at
+      # the version the reference implementation needs, so both jobs exercise
+      # the same one.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pyyaml omegaconf kadet jinja2
+      - run: pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --locked
       - run: cargo test --locked
+
+  parity:
+    name: Reference parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The reference implementation. omegaconf is pinned because kapitan
+      # 0.36.3 accepts >=2.4.0.dev3, and 2.4.0.dev15 dropped ListMergeMode,
+      # which its omegaconf backend imports.
+      - run: pip install "kapitan[omegaconf]==0.36.3" "omegaconf==2.4.0.dev3"
+      - run: python tests/fixtures/generate_expected.py
+      - name: Expected output is still what the reference prints
+        run: |
+          git add -A tests/fixtures/expected
+          git diff --cached --exit-code -- tests/fixtures/expected || {
+            echo "::error::tests/fixtures/expected no longer matches kapitan 0.36.3. Regenerate it (see tests/fixtures/README.md) and commit the result."
+            exit 1
+          }
 
   vscode:
     name: VS Code extension

@@ -27,7 +27,9 @@ stops every build's daemon for the inventory).
   `crates/krab-inventory/tests/fixture.rs` compares byte for byte. Add a
   case there for every engine behaviour you change or fix, then regenerate
   the expected output with the reference implementation
-  (`tests/fixtures/README.md`).
+  (`tests/fixtures/README.md`). CI regenerates it too, with
+  `kapitan[omegaconf]==0.36.3` and `omegaconf==2.4.0.dev3`, and fails if the
+  committed files differ, so a hand-written expectation cannot pass.
 * `crates/krab-compile/tests/kadet_runner.rs` evaluates the component in
   `tests/fixtures/kadet` through the kadet evaluator and its bundled
   `kapitan` package (`crates/krab-compile/runner/kapitan`), checking the
@@ -78,8 +80,9 @@ package and install it.
 
 `.github/workflows/ci.yml` runs on every pull request and push to `main`:
 `cargo fmt --check`, `cargo clippy --all-targets` and `cargo test` with
-warnings denied, and `npm run package` in `editors/vscode` (the `.vsix` is
-kept as a workflow artifact). The corpus test does not run there; it needs
+warnings denied, the reference-parity job described under Tests, and
+`npm run package` in `editors/vscode` (the `.vsix` is kept as a workflow
+artifact). The corpus test does not run there; it needs
 a real inventory and the reference implementation.
 
 To release, bump `version` in the workspace `Cargo.toml` (and the extension's
