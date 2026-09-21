@@ -115,8 +115,8 @@ native `contrib` set is a port of one such file and cannot follow its edits.
 For the same reason `contrib` holds general purpose helpers only; anything
 that encodes one repository's data shape or a cloud's naming belongs in that
 repository's `resolvers.py`.
-The registry records the files it depends on; the daemon exits when one
-changes and the next request starts a fresh one.
+The registry records the files it depends on, `.kapitan` among them; the
+daemon exits when one changes and the next request starts a fresh one.
 
 `write` (mutating the tree from a resolver) is not supported and reports why.
 

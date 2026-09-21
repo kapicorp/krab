@@ -54,9 +54,9 @@ pub type ResolverFn = dyn Fn(&mut Ctx, &[Value]) -> ResolverResult + Send + Sync
 #[derive(Clone, Default)]
 pub struct Registry {
     map: BTreeMap<String, Arc<ResolverFn>>,
-    /// Files the registry was built from (a `resolvers.py` and what it
-    /// imports); when one changes the registry must be rebuilt, so the
-    /// daemon restarts.
+    /// Files the registry was built from (`.kapitan`, a `resolvers.py` and
+    /// what it imports); when one changes the registry must be rebuilt, so
+    /// the daemon restarts.
     sources: Vec<PathBuf>,
     /// Where the non-native resolvers came from, for diagnostics
     /// (`12 Python resolvers from resolvers.py via python3`).
