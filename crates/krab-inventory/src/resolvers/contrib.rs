@@ -1,6 +1,9 @@
 //! General purpose resolvers contributed by kapitan users (originally the
 //! `resolvers.py` of a production inventory). Anything here is safe to use
-//! from any inventory; domain specific helpers are grouped at the end.
+//! from any inventory. Domain specific helpers (a cloud's region naming, the
+//! shape of one repository's data) stay in that repository's `resolvers.py`:
+//! a native port cannot follow the file's later edits, and with
+//! `prefer-native` it would silently shadow them.
 
 use md5::Md5;
 use sha2::{Digest, Sha256};
@@ -23,20 +26,6 @@ pub fn register(r: &mut Registry) {
     r.register("filter_keys", filter_keys);
     r.register("join", join);
     r.register("join_quoted", join_quoted);
-    // Cloud specific helpers.
-    r.register(
-        "gcp_artifact_registry_multi_region_location",
-        gcp_artifact_registry_multi_region_location,
-    );
-    r.register(
-        "gcp_cloud_storage_multi_region_location",
-        gcp_cloud_storage_multi_region_location,
-    );
-    r.register("worker_cluster_gpu_configs", worker_cluster_gpu_configs);
-    r.register(
-        "filter_tenants_by_execution_location",
-        filter_tenants_by_execution_location,
-    );
 }
 
 fn replace(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
@@ -283,109 +272,4 @@ fn join(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 
 fn join_quoted(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     join_with(ctx, "join_quoted", args, true)
-}
-
-fn gcp_artifact_registry_multi_region_location(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
-    arity("gcp_artifact_registry_multi_region_location", args, 1, 1)?;
-    let region = as_str("gcp_artifact_registry_multi_region_location", args, 0)?;
-    let loc = if region.starts_with("us-") {
-        "us"
-    } else if region.starts_with("europe-") {
-        "europe"
-    } else if region.starts_with("asia-") {
-        "asia"
-    } else {
-        return Err(format!("cannot derive multi-region location from region: {region}").into());
-    };
-    Ok(Value::Str(loc.into()))
-}
-
-fn gcp_cloud_storage_multi_region_location(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
-    arity("gcp_cloud_storage_multi_region_location", args, 1, 1)?;
-    let region = as_str("gcp_cloud_storage_multi_region_location", args, 0)?;
-    let loc = if region.starts_with("us-") {
-        "US"
-    } else if region.starts_with("europe-") {
-        "EU"
-    } else if region.starts_with("asia-") {
-        "ASIA"
-    } else {
-        return Err(
-            format!("cannot derive GCS multi-region location from region: {region}").into(),
-        );
-    };
-    Ok(Value::Str(loc.into()))
-}
-
-const GCP_GPU_RESOURCE_TYPES: &[&str] = &[
-    "nvidia-l4",
-    "nvidia-rtx-pro-6000",
-    "nvidia-tesla-a100",
-    "nvidia-a100-80gb",
-    "nvidia-h100-80gb",
-    "nvidia-tesla-t4",
-    "nvidia-h200-141gb",
-    "nvidia-b200",
-];
-
-fn worker_cluster_gpu_configs(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
-    arity("worker_cluster_gpu_configs", args, 1, 1)?;
-    let key = as_str("worker_cluster_gpu_configs", args, 0)?.to_string();
-    let clusters = select_dict(ctx, "worker_cluster_gpu_configs", &key)?;
-    let mut out = Vec::new();
-    for cluster in clusters.values() {
-        let Value::Map(c) = &cluster.value else {
-            continue;
-        };
-        let gpu_types: Vec<Node> = c
-            .get("resource_limits")
-            .and_then(|l| l.as_list())
-            .unwrap_or(&[])
-            .iter()
-            .filter_map(|entry| entry.get("resource_type"))
-            .filter(|rt| {
-                rt.as_str()
-                    .is_some_and(|s| GCP_GPU_RESOURCE_TYPES.contains(&s))
-            })
-            .cloned()
-            .collect();
-        let name = c
-            .get("name")
-            .cloned()
-            .ok_or_else(|| ResolverError::Message("worker cluster without `name`".into()))?;
-        let mut m = Map::new();
-        m.insert("name".into(), name);
-        m.insert(
-            "gpu_types".into(),
-            Node::new(Value::List(gpu_types), cluster.origin),
-        );
-        out.push(Node::new(Value::Map(m), cluster.origin));
-    }
-    Ok(Value::List(out))
-}
-
-fn filter_tenants_by_execution_location(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
-    arity("filter_tenants_by_execution_location", args, 3, 3)?;
-    let key = as_str("filter_tenants_by_execution_location", args, 0)?.to_string();
-    let provider = as_py_str(args, 1);
-    let location = as_py_str(args, 2);
-    let tenants = select_dict(ctx, "filter_tenants_by_execution_location", &key)?;
-    let matches = |loc: &Node| {
-        loc.get("provider")
-            .is_some_and(|p| p.value.py_eq(&Value::Str(provider.clone())))
-            && loc
-                .get("location")
-                .is_some_and(|l| l.value.py_eq(&Value::Str(location.clone())))
-    };
-    Ok(Value::List(
-        tenants
-            .iter()
-            .filter(|(_, cfg)| {
-                cfg.get("execution_locations")
-                    .and_then(|l| l.as_list())
-                    .is_some_and(|locs| locs.iter().any(|l| l.as_map().is_some() && matches(l)))
-            })
-            .map(|(k, v)| Node::new(Value::Str(k.clone()), v.origin))
-            .collect(),
-    ))
 }
