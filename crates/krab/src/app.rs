@@ -113,6 +113,11 @@ impl App {
             }
             None => registry.set_description("no resolvers.py found, native resolvers only"),
         }
+        // The server is configured from `.kapitan` (inventory settings, the
+        // Python resolver setup): an edit restarts it like a resolvers.py edit.
+        if let Some(file) = &dot.file {
+            registry.add_source(file.canonicalize().unwrap_or_else(|_| file.clone()));
+        }
         let inv = Inventory::new(cfg, Arc::new(registry));
         let connector = (!no_daemon && !raw).then(|| Connector {
             inventory_root: inventory_path.clone(),

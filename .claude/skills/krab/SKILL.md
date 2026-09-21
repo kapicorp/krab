@@ -107,8 +107,8 @@ inventory:
 - Keep `prefer-native: true`. With `false`, `json`, `to_yaml`, `pluck` and
   friends run in Python and their `_root_` lookups call Python again; each
   nested call needs a further worker process, which is correct but slow.
-- The daemon restarts itself when `resolvers.py` or a module it imports
-  changes. The unknown-resolver help ends with where the known resolvers came
+- The daemon restarts itself when `.kapitan`, `resolvers.py` or a module it
+  imports changes. The unknown-resolver help ends with where the known resolvers came
   from (`18 Python resolvers from … via python3 (2 kept native)`), and
   `krab server status` prints the same under `resolvers`; if a resolver that
   exists in the file is reported unknown, that line says which build and

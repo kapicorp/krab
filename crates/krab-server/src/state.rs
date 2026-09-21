@@ -19,8 +19,8 @@ pub struct State {
     changed_lock: Mutex<()>,
     pub started: Instant,
     pub last_request: Mutex<Instant>,
-    /// Set when the server must exit and be started afresh (a file the
-    /// resolver registry was built from changed).
+    /// Set when the server must exit and be started afresh (a file it was
+    /// configured from changed: `.kapitan`, a `resolvers.py`).
     pub stop: AtomicBool,
     /// Set once the initial render is done; requests wait for it.
     ready: AtomicBool,
@@ -85,7 +85,8 @@ impl State {
         }
     }
 
-    /// A file the resolver registry was built from (a `resolvers.py`).
+    /// A file the server was configured from (`.kapitan`, a `resolvers.py`
+    /// and the modules it imports).
     pub fn is_registry_source(&self, path: &Path) -> bool {
         self.inv.registry.is_source(path)
     }
@@ -128,9 +129,9 @@ impl State {
     /// caches that depend on them and re-render exactly the affected targets.
     pub fn apply_changes(&self, changed: Vec<PathBuf>) -> ChangeSummary {
         if let Some(source) = changed.iter().find(|p| self.is_registry_source(p)) {
-            // The registry (Python resolvers) is fixed for the life of the
-            // process; the next client request starts a fresh server.
-            tracing::info!(file = %source.display(), "resolver source changed, restarting");
+            // The configuration (`.kapitan`, Python resolvers) is fixed for the
+            // life of the process; the next client request starts a fresh server.
+            tracing::info!(file = %source.display(), "configuration source changed, restarting");
             self.stop.store(true, Ordering::SeqCst);
         }
         let changed = self.expand_aliases(changed);

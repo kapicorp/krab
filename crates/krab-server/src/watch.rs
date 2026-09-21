@@ -66,8 +66,8 @@ pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
         },
     )?;
     debouncer.watch(root, RecursiveMode::Recursive)?;
-    // Files the resolver registry was built from (a `resolvers.py`) may live
-    // outside the inventory; watch their directories so a change restarts us.
+    // Files the server was configured from (`.kapitan`, a `resolvers.py`) may
+    // live outside the inventory; watch their directories so a change restarts us.
     for dir in state
         .inv
         .registry
