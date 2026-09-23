@@ -86,7 +86,7 @@ pub fn complete_target(current: &OsStr) -> Vec<CompletionCandidate> {
         .clone()
         .unwrap_or_else(|| PathBuf::from("./inventory"));
     let mut cfg = InventoryConfig::new(root);
-    cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
+    cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
     let inv = Inventory::new(cfg, std::sync::Arc::new(Registry::new()));
     inv.discover_targets()
         .unwrap_or_default()

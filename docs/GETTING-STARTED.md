@@ -53,9 +53,10 @@ identical either way, which is also how you check the daemon is fresh.
 
 ## 3. Look at the inventory
 
-Target names are the dotted path of the target file under
-`inventory/targets`: `inventory/targets/gcp/prod/cluster.yml` is
-`gcp.prod.cluster`.
+A target is named after its file: `inventory/targets/gcp/prod/cluster.yml` is
+`cluster`. Set `compose-target-name` in `.kapitan` to name it after the path
+(`gcp.prod.cluster`) and have `compiled/` follow the same layout. The dotted
+path selects the target either way.
 
 ```sh
 krab inventory targets                       # table: name, labels, classes, compile inputs, status

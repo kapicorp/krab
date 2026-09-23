@@ -86,7 +86,7 @@ impl App {
         }
         let inventory_path = inventory_path.canonicalize().unwrap_or(inventory_path);
         let mut cfg = InventoryConfig::new(inventory_path.clone());
-        cfg.compose_target_name = dot.compose_target_name.unwrap_or(true);
+        cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
         cfg.normalize = !raw;
         let mut registry = Registry::with_builtins();
         match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {

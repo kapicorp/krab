@@ -33,8 +33,10 @@ Show the rendered inventory. Without a subcommand it prints target documents.
 | `--format yaml\|json` | output format (default `yaml`) |
 | `-i, --indent <N>` | YAML indentation (default: `inventory.indent` from `.kapitan`, else 2) |
 
-Target names are the dotted path of the target file under `targets/`
-without the extension: `targets/a/b/c.yml` is `a.b.c`.
+A target is named after its file: `targets/a/b/c.yml` is `c`. With
+`compose-target-name` it is named after the path (`a.b.c`), which is also what
+the compiled directory follows. Both spellings select it, so `-t a.b.c` works
+either way.
 
 ### `inventory targets`
 
@@ -272,7 +274,7 @@ itself uses:
 | key | section(s) | use |
 |---|---|---|
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
-| `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout |
+| `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout (default: off) |
 | `inventory-backend` | `global` | informational; only `omegaconf` semantics are implemented |
 | `indent` | `inventory` | YAML indentation for `krab inventory` |
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |

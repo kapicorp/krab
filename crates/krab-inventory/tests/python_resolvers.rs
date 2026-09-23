@@ -136,7 +136,10 @@ fn fixture_inventory_matches_the_reference_through_python() {
     }
     let root = fixtures().join("inventory");
     let registry = registry_with(root.join("resolvers.py"), "python3", false);
-    let inv = Inventory::new(InventoryConfig::new(root), Arc::new(registry));
+    // As `generate_expected.py` renders it.
+    let mut cfg = InventoryConfig::new(root);
+    cfg.compose_target_name = true;
+    let inv = Inventory::new(cfg, Arc::new(registry));
     let report = inv.render_all().expect("discover targets");
     if let Some(e) = report.errors.first() {
         panic!("{e}");
