@@ -1,0 +1,20 @@
+# Link checking for the documentation. .github/workflows/links.yml runs it
+# weekly; `lychee --config lychee.toml .` runs the same check locally.
+
+# Vendored upstream sources and generated output are not ours to fix.
+exclude_path = ["vendor", "target", "editors/vscode/node_modules", "tests/fixtures"]
+
+# A release URL exists only once the release does, and the crates.io link
+# only once the crates are published, which is deliberately not the case.
+exclude = [
+    "^https://github\\.com/kapicorp/krab/releases/download/",
+    "^https://crates\\.io/",
+    # The roadmap board is a private org project, so an anonymous request
+    # gets 404 whether or not it exists.
+    "^https://github\\.com/orgs/kapicorp/projects/",
+]
+
+# Rate limiting and bot rejection are not broken links.
+accept = ["200", "206", "403", "429"]
+max_retries = 3
+timeout = 20

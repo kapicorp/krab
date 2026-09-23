@@ -1,0 +1,28 @@
+# Checks that the links in the documentation still resolve.
+#
+# On a schedule rather than per pull request: link rot happens on someone
+# else's server, so a pull request that changed nothing relevant should not
+# fail for it. Run it by hand from the Actions tab to check before a release.
+name: Links
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  lychee:
+    name: Link check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --no-progress --config lychee.toml .
+          fail: true
