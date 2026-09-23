@@ -1,0 +1,53 @@
+# Release notes from the commit log. krab's commit convention is
+# `area: what changed`, not Conventional Commits, so the parser groups by the
+# area prefix the repository already uses.
+#
+# .github/workflows/release.yml runs this for the body of the GitHub release.
+# To see what the next tag would say:
+#
+#     git cliff --unreleased --tag v2.0.0-alpha.5
+
+[changelog]
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | split(pat=":") | slice(start=1) | join(sep=":") | trim }}\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = false
+filter_commits = true
+protect_breaking_commits = false
+sort_commits = "oldest"
+topo_order = false
+
+commit_preprocessors = [
+    # Drop the pull request reference GitHub appends to a squash merge.
+    { pattern = ' *\(#([0-9]+)\)$', replace = "" },
+]
+
+commit_parsers = [
+    # Merge commits and version bumps are bookkeeping, not news.
+    { message = "^Merge ", skip = true },
+    { message = "^Bump version", skip = true },
+
+    { message = "^inventory: ", group = "Inventory" },
+    { message = "^server: ", group = "Inventory server" },
+    { message = "^compile: ", group = "Compile" },
+    { message = "^refs: ", group = "References" },
+    { message = "^lsp: ", group = "Language server" },
+    { message = "^vscode: ", group = "VS Code extension" },
+    { message = "^cli: ", group = "Command line" },
+    { message = "^(docs|README): ", group = "Documentation" },
+    { message = "^(github|ci|deps|lints|tests|rename|skills): ", group = "Repository" },
+
+    # Anything else still appears, so a new area is visible rather than lost.
+    { message = "^[a-z0-9-]+: ", group = "Other" },
+    { message = ".*", skip = true },
+]
