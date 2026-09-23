@@ -1,0 +1,9 @@
+classes:
+  - deferred
+parameters:
+  overrides:
+    ns: override-ns
+  alias: ${base_component}
+  merged: ${merge:${base_component}, ${overrides}}
+  nested:
+    again: ${merge:${base_component}}

@@ -41,6 +41,9 @@ pub struct ResolveEvent {
     pub origin: Origin,
 }
 
+/// How many copies of copies [`Evaluator::anchored`] follows.
+const ANCHOR_DEPTH: usize = 8;
+
 pub struct Evaluator<'a> {
     pub(crate) root: &'a mut Node,
     pub(crate) registry: &'a Registry,
@@ -48,6 +51,11 @@ pub struct Evaluator<'a> {
     pub(crate) target: &'a str,
     asts: HashMap<String, Rc<Text>>,
     cache: HashMap<KeyPath, Resolved>,
+    /// For a value copied out of another container by an interpolation: where
+    /// the container came from. See [`Evaluator::anchored`].
+    anchors: HashMap<KeyPath, KeyPath>,
+    /// The first container source seen while the current node is evaluated.
+    pending_source: Option<KeyPath>,
     stack: Vec<KeyPath>,
     track: bool,
     pub events: Vec<ResolveEvent>,
@@ -69,6 +77,8 @@ impl<'a> Evaluator<'a> {
             target,
             asts: HashMap::new(),
             cache: HashMap::new(),
+            anchors: HashMap::new(),
+            pending_source: None,
             stack: Vec::new(),
             track,
             events: Vec::new(),
@@ -131,6 +141,7 @@ impl<'a> Evaluator<'a> {
             let n = get(self.root, path).unwrap();
             (n.as_str().unwrap_or_default().to_string(), n.origin)
         };
+        let outer_source = self.pending_source.take();
         let resolved = self.deref_at(path)?;
         let source = match resolved {
             Resolved::At(q) => {
@@ -144,6 +155,12 @@ impl<'a> Evaluator<'a> {
                 None
             }
         };
+        if let Some(from) = self.pending_source.take()
+            && get(self.root, path).is_some_and(|n| n.value.is_container())
+        {
+            self.anchors.insert(path.clone(), from);
+        }
+        self.pending_source = outer_source;
         if self.track {
             self.events.push(ResolveEvent {
                 path: path.clone(),
@@ -153,6 +170,41 @@ impl<'a> Evaluator<'a> {
             });
         }
         Ok(())
+    }
+
+    /// Where the value at `path` was written, following the copies that
+    /// brought it here.
+    ///
+    /// A container reached through an interpolation - an alias, a
+    /// `${merge:...}` argument - keeps reporting the place it came from, so
+    /// `${key:}`, `${parentkey:}` and `${fullkey:}` written in a class and
+    /// copied into a component still name the class's key. The reference gets
+    /// this from the node metadata that `OmegaConf.merge` carries over from
+    /// its first argument; krab copies values rather than nodes, so the origin
+    /// is kept here instead.
+    ///
+    /// Only those three resolvers consult it. An ordinary interpolation, and a
+    /// relative one produced by `${relpath:...}`, is resolved by walking the
+    /// tree from where the value now sits, in both implementations.
+    pub(crate) fn anchored(&self, path: &KeyPath) -> KeyPath {
+        let mut path = path.clone();
+        for _ in 0..ANCHOR_DEPTH {
+            let Some((prefix, from)) = self
+                .anchors
+                .iter()
+                .filter(|(dest, _)| path.starts_with(dest))
+                .max_by_key(|(dest, _)| dest.0.len())
+            else {
+                return path;
+            };
+            let mut next = from.clone();
+            next.0.extend_from_slice(&path.0[prefix.0.len()..]);
+            if next == path {
+                return path;
+            }
+            path = next;
+        }
+        path
     }
 
     fn parse(&mut self, expr: &str, origin: Origin, path: &KeyPath) -> Result<Rc<Text>> {
@@ -274,6 +326,12 @@ impl<'a> Evaluator<'a> {
                 let full = format!("{}{}", ".".repeat(*dots), segs.join("."));
                 match self.select_path(base, &segs, at, origin)? {
                     Some(r) => {
+                        if let Resolved::At(q) = &r
+                            && self.pending_source.is_none()
+                            && get(self.root, q).is_some_and(|n| n.value.is_container())
+                        {
+                            self.pending_source = Some(q.clone());
+                        }
                         if let Resolved::At(q) = &r
                             && let Some(parent) = at.parent()
                             && parent.starts_with(q)

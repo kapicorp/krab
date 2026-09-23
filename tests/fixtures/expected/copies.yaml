@@ -1,0 +1,52 @@
+applications: []
+classes:
+  - deferred
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: copies
+      parts:
+        - copies
+      path: copies
+      short: copies
+  _reclass_:
+    name:
+      full: copies
+      parts:
+        - copies
+      path: copies
+      short: copies
+  alias:
+    component_name: base_component
+    full_key: base_component.full_key
+    ns: base-ns
+    own_key: own_key
+  base_component:
+    component_name: base_component
+    full_key: base_component.full_key
+    ns: base-ns
+    own_key: own_key
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  merged:
+    component_name: base_component
+    full_key: base_component.full_key
+    ns: override-ns
+    own_key: own_key
+  nested:
+    again:
+      component_name: base_component
+      full_key: base_component.full_key
+      ns: base-ns
+      own_key: own_key
+  overrides:
+    ns: override-ns
+resolved: false

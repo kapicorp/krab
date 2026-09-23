@@ -97,6 +97,18 @@ Three sets ship: `oc.*`, kapitan's built-ins (`key`, `parentkey`, `escape`,
 Boolean resolvers use Python truthiness on purpose (`${if:nonempty,…}` is
 true); a stricter mode is a planned opt-in.
 
+`key`, `parentkey` and `fullkey` answer for the place the value was *written*,
+not the place it currently sits. A container reached through an interpolation -
+an alias, a `${merge:…}` argument - is recorded with where it came from, and
+those three follow that chain (`Evaluator::anchored`). It matters for a
+deferred interpolation: `component_name: \${parentkey:}` in a base class is
+still the string `${parentkey:}` when `${merge:}` copies the class into a
+component, and is evaluated a pass later, by which time it sits under the
+component. The reference gets the same answer from the node metadata
+`OmegaConf.merge` carries over from its first argument. Nothing else uses the
+anchor: an ordinary interpolation, including a relative one produced by
+`${relpath:…}`, is resolved by walking the tree from where the value now is.
+
 A fourth set comes from the user's `resolvers.py` (`resolvers/python.rs`,
 `runner/resolver_runner.py`), the file kapitan's omegaconf backend imported.
 It runs in Python workers speaking newline-delimited JSON (`python.rs`, shared
