@@ -113,26 +113,20 @@ directories that belong to no target. Reasons printed by `--explain` and
 
 Dependencies (`parameters.kapitan.dependencies`) are fetched before
 staleness is decided, so the fetched files count as inputs like any other
-read. `type: git` clones with `git` and copies the repository or its
-`subdir` at `ref` (the remote's default branch when unset; `submodules:
-true` initialises submodules); `type: http`/`https` downloads the file and
-saves it, or with `unpack: true` extracts a tar, tar.gz/tgz or zip archive
-into `output_path`; `type: helm` runs `helm pull --untar` for `chart_name`
-at `version` from `source` (a repository URL or `oci://` reference) and
-keeps versioned charts under `$XDG_CACHE_HOME/krab/charts` so a chart
-seen once is never pulled again. `output_path` is relative to
-`--output-path`. As in kapitan, nothing that exists is overwritten unless
-forced; unlike kapitan, a dependency whose output path already exists is
-not fetched at all, so a repository with everything in place compiles
-offline. Without `--fetch` only items marked `force_fetch: true` are
-fetched (and overwritten). `--dry-run` lists what would be fetched.
-`type: oci` pulls an artifact (what `oras push` produces) from `source`, a
-bare `registry/repository:tag` or `@digest` reference, with the registry
-distribution API: layers are saved under their title annotation, tar blobs
-are extracted, and the artifact or its `subpath` is copied; `media_type`
-keeps only matching layers, `insecure: true` uses plain http, `tls_verify`
-is a boolean or a CA bundle path, and credentials come from `OCI_USERNAME`
-/ `OCI_PASSWORD`.
+read. `output_path` is relative to `--output-path`.
+
+| `type` | what it does |
+|---|---|
+| `git` | clones with `git` and copies the repository or its `subdir` at `ref` (the remote's default branch when unset; `submodules: true` initialises submodules) |
+| `http`, `https` | downloads the file and saves it, or with `unpack: true` extracts a tar, tar.gz/tgz or zip archive into `output_path` |
+| `helm` | runs `helm pull --untar` for `chart_name` at `version` from `source` (a repository URL or `oci://` reference), keeping versioned charts under `$XDG_CACHE_HOME/krab/charts` so a chart seen once is never pulled again |
+| `oci` | pulls an artifact (what `oras push` produces) from `source`, a bare `registry/repository:tag` or `@digest` reference, with the registry distribution API: layers are saved under their title annotation, tar blobs are extracted, and the artifact or its `subpath` is copied. `media_type` keeps only matching layers, `insecure: true` uses plain http, `tls_verify` is a boolean or a CA bundle path, and credentials come from `OCI_USERNAME` / `OCI_PASSWORD` |
+
+As in kapitan, nothing that exists is overwritten unless forced; unlike
+kapitan, a dependency whose output path already exists is not fetched at
+all, so a repository with everything in place compiles offline. Without
+`--fetch` only items marked `force_fetch: true` are fetched (and
+overwritten). `--dry-run` lists what would be fetched.
 
 References in the output are compiled the way kapitan does: an existing ref
 becomes `?{type:path:hash}` (or its embedded payload with `--embed-refs`),
