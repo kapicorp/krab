@@ -47,7 +47,10 @@ impl ClassDoc {
         for (key, node) in map {
             match key.as_str() {
                 "classes" => match node.value {
-                    Value::Null => {}
+                    // `_classes = content.get("classes") or []` in the
+                    // reference: anything falsy means no classes, and an empty
+                    // mapping is what a commented-out class list leaves behind.
+                    ref v if !v.truthy() => {}
                     Value::List(items) => {
                         for item in items {
                             match item.value {

@@ -1,0 +1,33 @@
+applications: []
+classes:
+  - commented_out
+  - no_classes
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: falsy_classes
+      parts:
+        - falsy_classes
+      path: falsy_classes
+      short: falsy_classes
+  _reclass_:
+    name:
+      full: falsy_classes
+      parts:
+        - falsy_classes
+      path: falsy_classes
+      short: falsy_classes
+  from_empty_mapping: true
+  from_empty_string: true
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  name: falsy
+resolved: false
