@@ -30,7 +30,7 @@ jobs:
       # kadet and jinja2 let the kadet evaluator test run. omegaconf is held at
       # the version the reference implementation needs, so both jobs exercise
       # the same one.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # The reference implementation. omegaconf is pinned because kapitan
