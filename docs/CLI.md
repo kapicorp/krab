@@ -228,7 +228,8 @@ The daemon is started automatically by the commands above; these manage it.
 
 One daemon per inventory directory and build. Socket:
 `$XDG_RUNTIME_DIR/krab/<inventory>-<build>.sock` (fallback
-`/tmp/krab-<uid>/`), where `<inventory>` hashes the canonical inventory
+`/tmp/krab-<uid>/`, also when the path under `XDG_RUNTIME_DIR` is too long
+for a unix socket), where `<inventory>` hashes the canonical inventory
 path and `<build>` the binary's version, size and mtime. Two builds pointed
 at the same inventory (the shell's `krab` and a development build the
 editor was pointed at) each

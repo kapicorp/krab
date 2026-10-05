@@ -1,6 +1,6 @@
 //! Where a server for a given inventory lives: socket and log file.
 
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{SocketAddr, UnixStream};
 use std::path::{Path, PathBuf};
 
 fn inventory_key(inventory_root: &Path) -> String {
@@ -11,10 +11,19 @@ fn inventory_key(inventory_root: &Path) -> String {
 }
 
 fn runtime_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR")
+    runtime_dir_in(std::env::var("XDG_RUNTIME_DIR").ok())
+}
+
+fn runtime_dir_in(xdg_runtime_dir: Option<String>) -> PathBuf {
+    if let Some(dir) = xdg_runtime_dir
         && !dir.is_empty()
     {
-        return PathBuf::from(dir).join("krab");
+        let dir = PathBuf::from(dir).join("krab");
+        // Every socket name has this length. A directory too long to hold it
+        // would leave the daemon unable to bind, so use the short one below.
+        if SocketAddr::from_pathname(dir.join("0000000000000000-00000000.sock")).is_ok() {
+            return dir;
+        }
     }
     // SAFETY: getuid() takes no arguments, cannot fail and has no preconditions.
     let uid = unsafe { libc::getuid() };
@@ -67,4 +76,23 @@ pub fn sockets(inventory_root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
 
 pub fn log_path(inventory_root: &Path) -> PathBuf {
     state_dir().join(format!("server-{}.log", inventory_key(inventory_root)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_long_runtime_dir_still_gives_a_bindable_socket() {
+        let long = format!("/tmp/{}", "x".repeat(80));
+        let dir = runtime_dir_in(Some(long));
+        let socket = dir.join(format!("{}-{}.sock", "0".repeat(16), "0".repeat(8)));
+        assert!(
+            SocketAddr::from_pathname(&socket).is_ok(),
+            "{} is too long for a unix socket",
+            socket.display()
+        );
+        let short = runtime_dir_in(Some("/run/user/1000".into()));
+        assert_eq!(short, PathBuf::from("/run/user/1000/krab"));
+    }
 }
