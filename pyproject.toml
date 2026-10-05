@@ -1,0 +1,19 @@
+# The `krab` wheel on PyPI: the binary as a script, plus `python -m krab`.
+# The version comes from crates/krab/Cargo.toml (2.0.0-alpha.5 becomes
+# 2.0.0a5). Built and published by .github/workflows/release.yml.
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "krab"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version", "description", "license"]
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "crates/krab/Cargo.toml"
+python-source = "python"
+module-name = "krab"
+strip = true

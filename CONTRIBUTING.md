@@ -127,11 +127,14 @@ git push origin "v$version"
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
-workspace version, builds `krab` for Linux x86_64 and aarch64 (each on its
-own Ubuntu 22.04 runner, so glibc 2.35 or newer) and for macOS Intel and
-Apple silicon, packages the extension, and creates the GitHub release with
+workspace version, builds `krab` for Linux x86_64 and aarch64 (with
+`cargo zigbuild` against glibc 2.17, failing if the binary needs a newer
+glibc symbol) and for macOS Intel and Apple silicon, packages the
+extension, and creates the GitHub release with
 the four `krab-<version>-<target>.tar.gz` archives, the `.vsix` and a
-`SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
+`SHA256SUMS` file. After that it publishes the same four targets as `krab`
+wheels to PyPI (`pyproject.toml`, version from Cargo.toml, so `2.0.0-alpha.1`
+becomes `2.0.0a1`). A tag with a pre-release suffix (`-alpha.1`) becomes a
 pre-release. If the release already exists (created from the GitHub UI, for
 example) the assets are uploaded to it instead. Running the workflow by hand
 from the Actions tab builds the same artifacts from any branch without
@@ -181,3 +184,12 @@ published `krab-inventory` would resolve against the unpatched crate on
 crates.io and silently lose the PyYAML compatibility fixes. `cargo install
 krab` needs the fork published under a name of its own, or the patches
 upstream, first. Releases ship prebuilt binaries, which are unaffected.
+
+PyPI gets the prebuilt binary as a wheel, which the patch question does not
+touch. Publishing uses trusted publishing, so the repository holds no PyPI
+token. Before the first release that publishes, a maintainer registers it
+once on pypi.org, under the account that will own the `krab` project:
+Account settings, Publishing, "Add a new pending publisher" with project
+name `krab`, owner `kapicorp`, repository `krab`, workflow `release.yml` and
+environment `pypi`. The first upload creates the project and turns the
+pending publisher into a normal one.
