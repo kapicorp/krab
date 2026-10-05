@@ -60,6 +60,16 @@ says nothing (`docs/DECISIONS.md`, D7).
 two "reclass compatibility" fallbacks that drop the first two name components.
 Relative names (`.foo`) resolve against the including class' directory.
 
+With `enable-class-wildcards` (`.kapitan` `inventory_backend` or `global`, or
+`--enable-class-wildcards`), a `classes` entry containing `*`, `?` or `[` is
+expanded first, as kapitan's `expand_class_patterns` does: Python
+`fnmatchcase` against the dotted names of every class file (`a/b.yml` and
+`a/b/init.yml` are `a.b`, a top-level `init.yml` is `init`, hidden entries are
+skipped), the sorted matches in place of the pattern, duplicates in that list
+dropped keeping the first. Entries containing `${` and entries naming an
+existing class stay as written; relative patterns are not expanded. A pattern
+that matches nothing fails only the targets that use it (D16).
+
 For each file the loader builds a `ClassClosure`: its classes' closures merged
 in order, then its own parameters. Merging is associative, so closures are
 memoised per class file and shared between targets. A target is
@@ -182,6 +192,8 @@ One daemon per inventory directory, started on demand by the CLI (or with
   files a target was rendered from *and* every path probed while resolving
   its class names, so creating `classes/common/init.yml` next to
   `classes/common.yml` invalidates exactly the targets that include `common`.
+  A wildcard class entry probes the whole `classes/` directory, so any class
+  file added or removed under it re-renders the targets that use one.
 * **Watching**: `notify` (debounced 150 ms) on the inventory directory, plus
   the real directories of symlinked files. Any event on a path re-renders the
   indexed targets (prefix match for directories and vanished paths), retries

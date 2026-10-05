@@ -1,0 +1,36 @@
+applications: []
+classes:
+  - wild.b
+  - wild.a
+  - wild.b.c
+exports: {}
+parameters:
+  _kapitan_:
+    name:
+      full: wildcard
+      parts:
+        - wildcard
+      path: wildcard
+      short: wildcard
+  _reclass_:
+    name:
+      full: wildcard
+      parts:
+        - wildcard
+      path: wildcard
+      short: wildcard
+  kapitan:
+    compile: []
+    dependencies: []
+    labels: {}
+    secrets: null
+    target_full_path: ''
+    validate: []
+    vars:
+      target: null
+  wild:
+    order:
+      - b
+      - a
+      - c
+resolved: false

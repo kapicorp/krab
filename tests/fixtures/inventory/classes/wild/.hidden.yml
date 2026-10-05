@@ -1,0 +1,3 @@
+parameters:
+  wild:
+    hidden: true

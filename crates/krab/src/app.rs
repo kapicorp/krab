@@ -69,10 +69,11 @@ impl App {
         json: bool,
         raw: bool,
         no_daemon: bool,
+        class_wildcards: bool,
     ) -> Result<App, Failure> {
         let cwd = std::env::current_dir()?;
         let dot = DotKapitan::load(&cwd).map_err(|e| Failure::Message(e.to_string()))?;
-        if let Some(w) = dot.backend_warning() {
+        for w in dot.backend_warning().iter().chain(&dot.key_warnings) {
             eprintln!("warning: {w}");
         }
         let inventory_path = inventory_path
@@ -91,6 +92,8 @@ impl App {
         let mut cfg = InventoryConfig::new(inventory_path.clone());
         cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
         cfg.normalize = !raw;
+        let dot_wildcards = dot.enable_class_wildcards.unwrap_or(false);
+        cfg.class_wildcards = class_wildcards || dot_wildcards;
         let mut registry = Registry::with_builtins();
         match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
             Some(python) => {
@@ -122,7 +125,9 @@ impl App {
             registry.add_source(file.canonicalize().unwrap_or_else(|_| file.clone()));
         }
         let inv = Inventory::new(cfg, Arc::new(registry));
-        let connector = (!no_daemon && !raw).then(|| Connector {
+        // The server is configured from `.kapitan` alone, like for `--raw`.
+        let local = no_daemon || raw || (class_wildcards && !dot_wildcards);
+        let connector = (!local).then(|| Connector {
             inventory_root: inventory_path.clone(),
             exe: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("krab")),
             version: build_version(),
