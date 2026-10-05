@@ -6,7 +6,8 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -179,10 +180,16 @@ pub fn script_digest(source: &str) -> String {
     blake3::hash(source.as_bytes()).to_hex().to_string()
 }
 
+/// How long one worker request may run unless `.kapitan`
+/// `compile.python-timeout` says otherwise.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
+
 #[derive(Debug)]
 pub enum WorkerError {
     Io(std::io::Error),
     Protocol(String),
+    /// No answer within the request deadline; the worker was killed.
+    Timeout(Duration),
     /// The worker reported a failure (message, traceback).
     Failed {
         error: String,
@@ -195,6 +202,11 @@ impl std::fmt::Display for WorkerError {
         match self {
             WorkerError::Io(e) => write!(f, "worker I/O error: {e}"),
             WorkerError::Protocol(m) => write!(f, "worker protocol error: {m}"),
+            WorkerError::Timeout(t) => write!(
+                f,
+                "no answer from Python within {} s (`.kapitan` compile.python-timeout); the worker was stopped",
+                t.as_secs()
+            ),
             WorkerError::Failed { error, .. } => write!(f, "{error}"),
         }
     }
@@ -213,13 +225,22 @@ impl From<std::io::Error> for WorkerError {
 pub struct Worker {
     child: Child,
     stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    /// The worker's stdout, line by line, from a reader thread, so a request
+    /// can wait with a deadline. An empty line means end of file.
+    lines: Receiver<std::io::Result<String>>,
+    /// The deadline of each request, `init` included.
+    timeout: Duration,
     next_id: u64,
     pub info: Value,
 }
 
 impl Worker {
-    pub fn spawn(python: &PythonCmd, script: &Path, init: Value) -> Result<Worker, WorkerError> {
+    pub fn spawn(
+        python: &PythonCmd,
+        script: &Path,
+        init: Value,
+        timeout: Duration,
+    ) -> Result<Worker, WorkerError> {
         let mut cmd: Command = python.command();
         cmd.arg(script)
             .stdin(Stdio::piped())
@@ -228,11 +249,23 @@ impl Worker {
             .env("PYTHONUNBUFFERED", "1");
         let mut child = cmd.spawn()?;
         let stdin = child.stdin.take().unwrap();
-        let stdout = BufReader::new(child.stdout.take().unwrap());
+        let mut stdout = BufReader::new(child.stdout.take().unwrap());
+        let (tx, lines) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            loop {
+                let mut buf = String::new();
+                let read = stdout.read_line(&mut buf);
+                let end = !matches!(read, Ok(n) if n > 0);
+                if tx.send(read.map(|_| buf)).is_err() || end {
+                    return;
+                }
+            }
+        });
         let mut w = Worker {
             child,
             stdin,
-            stdout,
+            lines,
+            timeout,
             next_id: 1,
             info: Value::Null,
         };
@@ -258,7 +291,8 @@ impl Worker {
 
     /// Send `req` and wait for its answer. While it works the worker may ask
     /// the host for things (a line carrying `op`); `on_request` answers each
-    /// and the reply goes back on its stdin.
+    /// and the reply goes back on its stdin. Without an answer within the
+    /// worker's timeout, counted from the send, the worker is killed.
     pub fn call_with(
         &mut self,
         mut req: Value,
@@ -268,9 +302,21 @@ impl Worker {
         self.next_id += 1;
         req["id"] = json!(id);
         self.send(&req)?;
+        let deadline = Instant::now() + self.timeout;
         loop {
-            let mut buf = String::new();
-            if self.stdout.read_line(&mut buf)? == 0 {
+            let buf = match self
+                .lines
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            {
+                Ok(line) => line?,
+                Err(RecvTimeoutError::Timeout) => {
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    return Err(WorkerError::Timeout(self.timeout));
+                }
+                Err(RecvTimeoutError::Disconnected) => String::new(),
+            };
+            if buf.is_empty() {
                 return Err(WorkerError::Protocol("worker exited unexpectedly".into()));
             }
             let msg: Value = serde_json::from_str(&buf)
@@ -302,6 +348,11 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
+        // A worker killed on timeout has no reader left: writing to its
+        // stdin would raise SIGPIPE, which krab does not ignore.
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            return;
+        }
         let _ = self.stdin.write_all(b"{\"op\":\"exit\",\"id\":0}\n");
         let _ = self.stdin.flush();
         // A worker blocked mid-request never reads the exit op. Give it a

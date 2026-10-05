@@ -190,6 +190,7 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
             .compile_bool("yaml-dump-null-as-empty")
             .unwrap_or(false),
         multiline,
+        python_timeout: app.dot.python_timeout(),
     };
     let opts = CompileOptions {
         repo_root: repo_root.clone(),

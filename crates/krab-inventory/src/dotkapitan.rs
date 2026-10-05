@@ -1,8 +1,10 @@
 //! The `.kapitan` settings file (YAML) found in the working directory.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::error::Result;
+use crate::python::DEFAULT_REQUEST_TIMEOUT;
 use crate::source::SourceId;
 use crate::value::{Map, Node, Value};
 use crate::yaml::parse_document;
@@ -182,6 +184,15 @@ impl DotKapitan {
         match self.compile.get(key)?.value {
             Value::Int(i) => Some(i),
             _ => None,
+        }
+    }
+
+    /// `compile.python-timeout` (whole seconds): the deadline of each
+    /// Python worker request, for kadet, the python backend and resolvers.
+    pub fn python_timeout(&self) -> Duration {
+        match self.compile_int("python-timeout") {
+            Some(s) if s > 0 => Duration::from_secs(s as u64),
+            _ => DEFAULT_REQUEST_TIMEOUT,
         }
     }
 

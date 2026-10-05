@@ -8,6 +8,7 @@
 //! the host sends, so the interpreter only needs `kadet` installed.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde_json::{Value as Json, json};
 
@@ -123,14 +124,17 @@ pub struct KadetPool {
     init: Json,
     /// The evaluator's working directory (the repository root).
     cwd: PathBuf,
+    /// The deadline of each evaluator request.
+    timeout: Duration,
 }
 
 impl KadetPool {
     /// `init` is the evaluator's `init` request without `op`: `cwd`,
     /// `inventory_file` or `inventory_socket`, `settings`, `krab_version`.
-    pub fn new(python: PythonCmd, init: Json) -> std::io::Result<KadetPool> {
+    pub fn new(python: PythonCmd, init: Json, timeout: Duration) -> std::io::Result<KadetPool> {
         Ok(KadetPool {
             python,
+            timeout,
             script: materialize_kadet_runner()?,
             cwd: init
                 .get("cwd")
@@ -156,7 +160,7 @@ impl KadetPool {
     ) -> Result<Json, String> {
         if evaluator.is_none() {
             *evaluator = Some(
-                Worker::spawn(&self.python, &self.script, self.init.clone())
+                Worker::spawn(&self.python, &self.script, self.init.clone(), self.timeout)
                     .map_err(|e| format!("cannot start the kadet evaluator: {e}"))?,
             );
         }
@@ -221,6 +225,10 @@ impl KadetPool {
                 Some(tb) => format!("{error}\n{tb}"),
                 None => error,
             }),
+            Err(e @ WorkerError::Timeout(_)) => {
+                *evaluator = None;
+                Err(e.to_string())
+            }
             Err(e) => {
                 *evaluator = None;
                 Err(format!("kadet evaluator died: {e}"))

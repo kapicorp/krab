@@ -11,6 +11,7 @@ use std::process::Command;
 use krab_compile::inputs::Reads;
 use krab_compile::inputs::kadet::KadetPool;
 use krab_compile::python::PythonCmd;
+use krab_inventory::python::DEFAULT_REQUEST_TIMEOUT;
 use serde_json::{Value, json};
 
 fn fixture() -> PathBuf {
@@ -50,7 +51,12 @@ fn evaluates_a_component_without_the_python_kapitan() {
             "indent": 2,
         },
     });
-    let pool = KadetPool::new(PythonCmd::parse("python3").unwrap(), init).unwrap();
+    let pool = KadetPool::new(
+        PythonCmd::parse("python3").unwrap(),
+        init,
+        DEFAULT_REQUEST_TIMEOUT,
+    )
+    .unwrap();
     let mut reads = Reads::default();
     let output = pool
         .eval(
@@ -155,7 +161,12 @@ fn undeclared_topic_is_a_compile_error() {
         "inventory_file": root.join("inventory.json"),
         "settings": { "search_paths": [root.clone(), root.join("lib")] },
     });
-    let pool = KadetPool::new(PythonCmd::parse("python3").unwrap(), init).unwrap();
+    let pool = KadetPool::new(
+        PythonCmd::parse("python3").unwrap(),
+        init,
+        DEFAULT_REQUEST_TIMEOUT,
+    )
+    .unwrap();
     let mut reads = Reads::default();
     // app.api produces the topic but does not declare `consume: true`.
     let err = pool

@@ -93,7 +93,8 @@ impl App {
         cfg.normalize = !raw;
         let mut registry = Registry::with_builtins();
         match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
-            Some(python) => {
+            Some(mut python) => {
+                python.timeout = dot.python_timeout();
                 if !python.python.exists() {
                     return Err(Failure::Diagnostics(
                         vec![missing_python(&python.python.description, &dot)],

@@ -663,7 +663,7 @@ fn run_one(
         attempts += 1;
         if worker.is_none() {
             let spawned = ctx.opts.python.clone().and_then(|p| {
-                Worker::spawn(&p, script, init.clone())
+                Worker::spawn(&p, script, init.clone(), ctx.opts.native.python_timeout)
                     .map_err(|e| format!("cannot start compile worker: {e}"))
             });
             match spawned {
@@ -753,9 +753,10 @@ fn run_one(
                 };
             }
             Err(e) => {
-                // The worker died; start a fresh one and retry once.
+                // The worker died; start a fresh one and retry once. A retry
+                // after a timeout would only wait out the deadline again.
                 *worker = None;
-                if attempts >= 2 {
+                if attempts >= 2 || matches!(e, WorkerError::Timeout(_)) {
                     return Outcome {
                         target: plan.name.clone(),
                         status: Status::Failed {

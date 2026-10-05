@@ -27,7 +27,10 @@ use serde_json::{Value as Json, json};
 use super::{ArgKind, Ctx, Registry, ResolverError, ResolverFn, ResolverResult};
 use crate::dotkapitan::PythonResolverSettings;
 use crate::path::Key;
-use crate::python::{PythonCmd, Worker, WorkerError, cache_dir, materialize_script, script_digest};
+use crate::python::{
+    DEFAULT_REQUEST_TIMEOUT, PythonCmd, Worker, WorkerError, cache_dir, materialize_script,
+    script_digest,
+};
 use crate::value::Value;
 
 pub const RUNNER_SOURCE: &str = include_str!("../../runner/resolver_runner.py");
@@ -54,6 +57,8 @@ pub struct PythonConfig {
     pub prefer_native: bool,
     /// Upper bound on concurrently running worker processes.
     pub max_workers: usize,
+    /// The deadline of each worker request (`compile.python-timeout`).
+    pub timeout: Duration,
 }
 
 impl PythonConfig {
@@ -91,6 +96,7 @@ impl PythonConfig {
             python: PythonCmd::preferred(settings.python.as_deref()),
             prefer_native: settings.prefer_native.unwrap_or(false),
             max_workers: max_workers.max(1),
+            timeout: DEFAULT_REQUEST_TIMEOUT,
         })
     }
 }
@@ -277,7 +283,7 @@ impl PythonResolvers {
         let script = materialize_script("resolver_runner.py", RUNNER_SOURCE)
             .map_err(|e| format!("cannot write the Python resolver worker script: {e}"))?;
         let init = json!({ "file": self.cfg.file, "cwd": self.cfg.cwd });
-        Worker::spawn(&self.cfg.python, &script, init).map_err(|e| match e {
+        Worker::spawn(&self.cfg.python, &script, init, self.cfg.timeout).map_err(|e| match e {
             WorkerError::Failed { error, traceback } => {
                 if let Some(tb) = traceback {
                     tracing::debug!("{tb}");
@@ -389,6 +395,10 @@ impl PythonResolvers {
                 Err(e) => {
                     drop(worker);
                     self.discard();
+                    // A retry would only wait out the deadline again.
+                    if let WorkerError::Timeout(_) = e {
+                        return Err(e.to_string().into());
+                    }
                     if attempts >= 2 {
                         return Err(format!("Python resolver worker died: {e}").into());
                     }

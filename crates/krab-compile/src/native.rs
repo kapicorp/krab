@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use krab_inventory::Value;
 use krab_inventory::emit::MultilineStyle;
@@ -34,6 +35,8 @@ pub struct NativeOptions {
     pub null_as_empty: bool,
     /// Used unless the target sets `parameters.multiline_string_style`.
     pub multiline: MultilineStyle,
+    /// The deadline of each Python worker request (`compile.python-timeout`).
+    pub python_timeout: Duration,
 }
 
 pub struct CompileOutcome {
@@ -101,7 +104,7 @@ impl NativeCompiler {
         });
         let refs = Arc::new(RefController::new(opts.refs_path.clone(), opts.embed_refs));
         let kadet = match python {
-            Ok(p) => Ok(KadetPool::new(p, init)?),
+            Ok(p) => Ok(KadetPool::new(p, init, opts.python_timeout)?),
             Err(e) => Err(e),
         };
         Ok(NativeCompiler {

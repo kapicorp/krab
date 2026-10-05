@@ -166,7 +166,8 @@ manifest. `--reveal` decrypts refs into the output instead, and makes the
 `.kapitan` keys used: `compile.search-paths`, `compile.output-path`,
 `compile.indent`, `compile.fetch`, `compile.force-fetch`, `compile.refs-path`,
 `compile.embed-refs`, `compile.reveal`, `compile.python-requirements`,
-`compile.yaml-multiline-string-style`, `inventory.python-resolvers`.
+`compile.python-timeout`, `compile.yaml-multiline-string-style`,
+`inventory.python-resolvers`.
 
 `compile.python-requirements` (a list of pip specifiers, or the path of a
 requirements file) names what kadet components import besides `kadet` and
@@ -299,6 +300,7 @@ itself uses:
 | `search-paths`, `output-path`, `indent`, `fetch`, `force-fetch` | `compile` | as for krab compile |
 | `refs-path`, `embed-refs`, `reveal` | `compile` | where ref files live, embed them, reveal them |
 | `python-requirements` | `compile` | packages kadet components import; installed into krab's own venv |
+| `python-timeout` | `compile` | seconds one Python request (a kadet component, a python-backend target, a Python resolver call) may run before krab stops the worker and fails it (default 600) |
 | `refs-path` | `refs` | where `krab refs` looks for ref files |
 | `yaml-multiline-string-style` | `compile` | multiline string style for compiled YAML (default `literal`) |
 
