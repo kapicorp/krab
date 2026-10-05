@@ -36,7 +36,8 @@ and anchors work. Deviations from PyYAML: timestamps stay strings (the
 reference cannot hold `datetime` values anyway); unknown tags are errors.
 
 A class or target file is a `ClassDoc { classes, parameters, applications,
-exports }`; `null` sections are empty, unknown top-level keys are ignored.
+exports }`; `null` sections are empty, unknown top-level keys are ignored
+with an `inventory::unknown_section` warning.
 
 ## Target names
 

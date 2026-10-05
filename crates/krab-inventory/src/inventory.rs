@@ -116,6 +116,8 @@ pub struct ClassClosure {
     /// Every path that was checked while resolving class names (hits and
     /// misses). Creating a file at one of these can change the render.
     pub probes: Vec<PathBuf>,
+    /// Warnings about this file and the included classes, one per location.
+    pub warnings: Vec<Diagnostic>,
     pub log: Arc<Vec<MergeEvent>>,
 }
 
@@ -530,6 +532,7 @@ impl Inventory {
         let mut exports = Node::map(Origin::SYNTHETIC);
         let mut files = vec![file.to_path_buf()];
         let mut probes: Vec<PathBuf> = Vec::new();
+        let mut warnings: Vec<Diagnostic> = doc.warnings.clone();
         let mut own_log: Vec<MergeEvent> = Vec::new();
         let mut log = if self.cfg.track_provenance {
             Some(&mut own_log)
@@ -602,6 +605,12 @@ impl Inventory {
                     probes.push(p.clone());
                 }
             }
+            for w in &closure.warnings {
+                let at = |d: &Diagnostic| d.labels.first().map(|l| l.origin);
+                if !warnings.iter().any(|x| at(x) == at(w)) {
+                    warnings.push(w.clone());
+                }
+            }
             nested_logs.push(closure.log.clone());
         }
         if !doc.parameters.as_map().is_some_and(|m| m.is_empty()) {
@@ -622,6 +631,7 @@ impl Inventory {
             exports,
             files,
             probes,
+            warnings,
             log: Arc::new(combined),
         })
     }
@@ -645,10 +655,14 @@ impl Inventory {
             exports,
             files,
             probes,
+            warnings,
             log,
         } = closure;
 
-        let mut warnings = Vec::new();
+        let mut warnings: Vec<Diagnostic> = warnings
+            .into_iter()
+            .map(|w| w.with_target(&spec.name))
+            .collect();
         let resolutions = {
             let mut ev = Evaluator::new(
                 &mut params,
