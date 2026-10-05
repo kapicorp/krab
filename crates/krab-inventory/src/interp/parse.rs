@@ -441,7 +441,8 @@ impl Parser {
     fn primitive(&mut self, dict_key: bool) -> PResult<Prim> {
         #[derive(Debug)]
         enum Tok {
-            Typed(Prim),
+            // The typed value and the source text used in a concatenation.
+            Typed(Prim, String),
             Text(String),
             Interp(Interp),
         }
@@ -511,14 +512,15 @@ impl Parser {
                     toks.push(Tok::Text("\\".into()));
                 } else {
                     self.pos = i;
-                    toks.push(Tok::Typed(Prim::Str(out)));
+                    toks.push(Tok::Typed(Prim::Str(out.clone()), out));
                     // ESC alone yields its unescaped text; mark as text-like typed str.
                 }
                 continue;
             }
             if let Some((len, prim)) = self.number() {
+                let source = self.chars[self.pos..self.pos + len].iter().collect();
                 self.pos += len;
-                toks.push(Tok::Typed(prim));
+                toks.push(Tok::Typed(prim, source));
                 continue;
             }
             if c.is_ascii_alphabetic() || c == '_' {
@@ -534,9 +536,9 @@ impl Parser {
                     "null" => Prim::Null,
                     "inf" => Prim::Float(f64::INFINITY),
                     "nan" => Prim::Float(f64::NAN),
-                    _ => Prim::Str(word),
+                    _ => Prim::Str(word.clone()),
                 };
-                toks.push(Tok::Typed(prim));
+                toks.push(Tok::Typed(prim, word));
                 continue;
             }
             // UNQUOTED_CHAR or (leniently) any other character.
@@ -548,7 +550,7 @@ impl Parser {
         }
         if toks.len() == 1 {
             return Ok(match toks.pop().unwrap() {
-                Tok::Typed(p) => p,
+                Tok::Typed(p, _) => p,
                 Tok::Text(s) => Prim::Str(s),
                 Tok::Interp(i) => Prim::Interp(Box::new(i)),
             });
@@ -562,7 +564,7 @@ impl Parser {
                     parts.push(TextPart::Interp(i));
                 }
                 Tok::Text(s) => lit.push_str(&s),
-                Tok::Typed(p) => lit.push_str(&prim_source(&p)),
+                Tok::Typed(_, source) => lit.push_str(&source),
             }
         }
         flush(&mut parts, &mut lit);
@@ -677,22 +679,6 @@ fn is_id(s: &str) -> bool {
     let mut chars = s.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-/// Source text of a typed token when it takes part in a concatenation. Typed
-/// tokens keep their original spelling in OmegaConf (`1_0` stays `1_0`), which
-/// we cannot recover after typing; the canonical spelling is used instead.
-fn prim_source(p: &Prim) -> String {
-    match p {
-        Prim::Null => "null".into(),
-        Prim::Bool(true) => "true".into(),
-        Prim::Bool(false) => "false".into(),
-        Prim::Int(i) => i.to_string(),
-        Prim::Float(f) => crate::value::py_float_repr(*f),
-        Prim::Str(s) => s.clone(),
-        Prim::Interp(i) => i.to_string(),
-        Prim::Concat(_) => String::new(),
-    }
 }
 
 #[cfg(test)]

@@ -46,6 +46,10 @@ parameters:
     sum: ${add:1,2}
     concat: ${add:a,b}
     empty_arg: ${oc.select:zz,}
+    indexed:
+      - a
+      - z: found
+    by_index: ${oc.select:app.indexed.1.z,fallback}
     merged: "${merge:${defaults.labels},{extra: x}}"
   kapitan:
     compile:
