@@ -502,13 +502,7 @@ fn fetch_git(wanted: &[Wanted], save_dir: &Path) -> GroupResults {
                 }
                 None => clone.clone(),
             };
-            if w.force {
-                copy_tree(&src, &w.dep.dest)
-            } else {
-                safe_copy_tree(&src, &w.dep.dest)
-            }
-            .map(|_| vec![])
-            .map_err(|e| {
+            copy_dependency(&src, &w.dep.dest, w.force, source).map_err(|e| {
                 format!(
                     "Dependency {source}: cannot copy to {}: {e}",
                     w.dep.dest.display()
@@ -779,13 +773,8 @@ fn fetch_helm(
                 std::fs::create_dir_all(parent)
                     .map_err(|e| format!("{label}: cannot create {}: {e}", parent.display()))?;
             }
-            if w.force {
-                copy_tree(&cached, dest)
-            } else {
-                safe_copy_tree(&cached, dest)
-            }
-            .map(|_| vec![])
-            .map_err(|e| format!("{label}: cannot copy to {}: {e}", dest.display()))
+            copy_dependency(&cached, dest, w.force, &label)
+                .map_err(|e| format!("{label}: cannot copy to {}: {e}", dest.display()))
         })
         .collect()
 }
@@ -884,14 +873,10 @@ fn fetch_oci(wanted: &[Wanted], save_dir: &Path) -> GroupResults {
                 None => target_dir.clone(),
             };
             let dest = &w.dep.dest;
-            if w.force {
-                copy_tree(&src, dest)
-            } else {
-                safe_copy_tree(&src, dest)
-            }
-            .map_err(|e| format!("Dependency {source}: cannot copy to {}: {e}", dest.display()))?;
+            let mut warnings = copy_dependency(&src, dest, w.force, source).map_err(|e| {
+                format!("Dependency {source}: cannot copy to {}: {e}", dest.display())
+            })?;
             // An artifact pushed from a parent directory lands one level deep.
-            let mut warnings = vec![];
             if subpath.is_none()
                 && let Ok(rd) = std::fs::read_dir(dest)
             {
@@ -1016,8 +1001,39 @@ pub fn safe_copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
     Ok(copied)
 }
 
-/// kapitan `copy_tree(clobber_files=True)`: copy everything, dot-entries
-/// included, replacing existing files. Returns how many files were copied.
+/// A dependency's copy to `dest`: [`copy_tree`] when forced, else
+/// [`safe_copy_tree`]. A forced copy warns once, naming the top-level dot
+/// entries it skipped.
+fn copy_dependency(
+    src: &Path,
+    dest: &Path,
+    force: bool,
+    source: &str,
+) -> std::io::Result<Vec<String>> {
+    if !force {
+        return safe_copy_tree(src, dest).map(|_| vec![]);
+    }
+    copy_tree(src, dest)?;
+    let mut skipped: Vec<String> = std::fs::read_dir(src)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with('.'))
+        .collect();
+    skipped.sort();
+    Ok(if skipped.is_empty() {
+        vec![]
+    } else {
+        vec![format!(
+            "Dependency {source}: not copied to {}: {} (a forced fetch skips dot entries too)",
+            dest.display(),
+            skipped.join(", ")
+        )]
+    })
+}
+
+/// kapitan `copy_tree(clobber_files=True)`: copy everything except
+/// dot-entries (kapitan copies those too), replacing existing files.
+/// Returns how many files were copied.
 pub fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
     if !src.is_dir() {
         return Err(std::io::Error::other(format!(
@@ -1035,6 +1051,9 @@ pub fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
     let mut copied = 0;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
         let from = entry.path();
         let to = dst.join(entry.file_name());
         if from.is_dir() {
@@ -1194,9 +1213,9 @@ mod tests {
         assert_eq!(read(&dst.join("sub/b.txt")), "b");
         assert!(!dst.join(".git").exists());
 
-        assert_eq!(copy_tree(&src, &dst).unwrap(), 3);
+        assert_eq!(copy_tree(&src, &dst).unwrap(), 2);
         assert_eq!(read(&dst.join("a.txt")), "new");
-        assert!(dst.join(".git/HEAD").exists());
+        assert!(!dst.join(".git").exists());
         assert!(copy_tree(&src.join("a.txt"), &dst).is_err());
     }
 
@@ -1340,6 +1359,40 @@ mod tests {
         );
         assert_eq!(out[0].reason, "forced (--force-fetch)");
         assert_eq!(read(&root.join("system/lib/a.py")), "v2");
+    }
+
+    /// A forced copy skips dot entries like an unforced one and names the
+    /// skipped top-level entries once (#217).
+    #[test]
+    fn forced_git_copy_skips_dot_entries() {
+        let dir = tmp("git-force-dot");
+        let origin = dir.join("origin");
+        let source = make_repo(&origin);
+        write(&origin.join(".hidden"), "h");
+        git_ok(&["add", "."], &origin);
+        git_ok(&["commit", "-q", "-m", "hidden"], &origin);
+        let root = dir.join("repo");
+        std::fs::create_dir_all(&root).unwrap();
+        let deps = dependencies(
+            "t",
+            &json!([{"type": "git", "source": source, "output_path": "vendor/lib"}]),
+            &root,
+        )
+        .unwrap();
+        let out = fetch(deps, &opts(&root, true, true));
+        assert!(
+            matches!(out[0].status, FetchStatus::Fetched { .. }),
+            "{out:?}"
+        );
+        assert_eq!(read(&root.join("vendor/lib/top.txt")), "top");
+        assert!(!root.join("vendor/lib/.git").exists());
+        assert!(!root.join("vendor/lib/.hidden").exists());
+        assert_eq!(out[0].warnings.len(), 1, "{out:?}");
+        assert!(
+            out[0].warnings[0].contains(".git, .hidden"),
+            "{:?}",
+            out[0].warnings
+        );
     }
 
     #[test]

@@ -329,7 +329,9 @@ does the same through GitPython and `helm pull`); http(s) uses `ureq`,
 with tar, gzip and zip unpacking by content type or magic bytes, as
 kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 `safe_copy_tree` (never overwrite, skip dot-entries) or, when forced,
-`copy_tree` (overwrite everything). Versioned helm charts are cached under
+`copy_tree` (overwrite). kapitan's forced copy also copies dot-entries such
+as `.git`; krab skips them and warns with the top-level names it skipped.
+Versioned helm charts are cached under
 `$XDG_CACHE_HOME/krab/charts` because a published chart version is
 immutable; `--force-fetch` pulls again.
 
