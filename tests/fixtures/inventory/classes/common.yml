@@ -12,6 +12,8 @@ parameters:
     sexagesimal: 1:30
     empty:
     tilde: ~
+    core_map: !!map {k: v}
+    core_seq: !!seq [1]
   list: [a, b]
   defaults:
     replicas: 1

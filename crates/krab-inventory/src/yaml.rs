@@ -123,7 +123,8 @@ impl Loader {
                 Error::new("yaml::unknown_alias", "alias refers to an undefined anchor")
                     .with_label(origin, "here")
             }),
-            Event::SequenceStart(anchor, _tag) => {
+            Event::SequenceStart(anchor, tag) => {
+                collection_tag(tag.as_deref(), "seq", origin)?;
                 let mut items = Vec::new();
                 loop {
                     let (ev, sp) = self.next(parser)?;
@@ -138,7 +139,8 @@ impl Loader {
                 }
                 Ok(node)
             }
-            Event::MappingStart(anchor, _tag) => {
+            Event::MappingStart(anchor, tag) => {
+                collection_tag(tag.as_deref(), "map", origin)?;
                 let mut pairs: Vec<(String, Node)> = Vec::new();
                 let mut merges: Vec<Node> = Vec::new();
                 loop {
@@ -248,6 +250,33 @@ fn marker_origin(file: SourceId, m: &Marker) -> Origin {
     Origin::new(file, m.line() as u32, m.col() as u32 + 1)
 }
 
+/// The tag as written: `!foo`, `!!set` (the parser expands `!!`).
+fn unknown_tag(tag: &Tag, origin: Origin) -> Error {
+    let handle = match tag.handle.as_str() {
+        "tag:yaml.org,2002:" => "!!",
+        h => h,
+    };
+    Error::new(
+        "yaml::unknown_tag",
+        format!("unsupported tag {handle}{}", tag.suffix),
+    )
+    .with_label(origin, "here")
+}
+
+/// A collection accepts no tag but its own core one (`!!map`, `!!seq`), which
+/// PyYAML's safe loader reads as untagged; anything else fails, as in kapitan
+/// (`!custom`, `!!set`) or by choice (`!!omap`, D22).
+fn collection_tag(tag: Option<&Tag>, core: &str, origin: Origin) -> Result<()> {
+    match tag {
+        Some(t)
+            if !(t.suffix == core && matches!(t.handle.as_str(), "!!" | "tag:yaml.org,2002:")) =>
+        {
+            Err(unknown_tag(t, origin))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn scalar_value(
     text: &str,
     style: ScalarStyle,
@@ -258,11 +287,7 @@ fn scalar_value(
         let suffix = tag.suffix.as_str();
         let is_core = tag.handle == "!!" || tag.handle == "tag:yaml.org,2002:";
         if !is_core {
-            return Err(Error::new(
-                "yaml::unknown_tag",
-                format!("unsupported tag !{}{}", tag.handle, tag.suffix),
-            )
-            .with_label(origin, "here"));
+            return Err(unknown_tag(tag, origin));
         }
         return match suffix {
             "str" => Ok(Value::Str(text.to_string())),
@@ -279,10 +304,7 @@ fn scalar_value(
                     .with_label(origin, "here")
             }),
             "null" => Ok(Value::Null),
-            other => Err(
-                Error::new("yaml::unknown_tag", format!("unsupported tag !!{other}"))
-                    .with_label(origin, "here"),
-            ),
+            _ => Err(unknown_tag(tag, origin)),
         };
     }
     if style != ScalarStyle::Plain {
@@ -502,6 +524,27 @@ mod tests {
         assert!(matches!(v("2024-01-01"), Value::Str(_)));
         assert!(matches!(v("-"), Value::Str(_)));
         assert!(matches!(v("08"), Value::Str(_)));
+    }
+
+    #[test]
+    fn non_core_tags_fail_as_written() {
+        let err = |doc: &str| match parse_document(doc, SourceId(0)) {
+            Ok(n) => panic!("{doc} parsed as {:?}", n.value),
+            Err(e) => {
+                let d = e.diagnostic().clone();
+                assert_eq!(d.code, "yaml::unknown_tag", "{doc}");
+                d.message
+            }
+        };
+        assert_eq!(err("t: !custom {z: 1}\n"), "unsupported tag !custom");
+        assert_eq!(err("t: !custom [1]\n"), "unsupported tag !custom");
+        assert_eq!(err("s: !!set {y: null}\n"), "unsupported tag !!set");
+        assert_eq!(err("m: !!omap [{x: 1}]\n"), "unsupported tag !!omap");
+        assert_eq!(err("m: !!map [1]\n"), "unsupported tag !!map");
+        assert_eq!(err("f: !foo bar\n"), "unsupported tag !foo");
+        let ok = parse_document("m: !!map {x: 1}\ns: !!seq [1]\n", SourceId(0)).unwrap();
+        assert!(ok.get("m").unwrap().as_map().is_some());
+        assert!(ok.get("s").unwrap().as_list().is_some());
     }
 
     #[test]
