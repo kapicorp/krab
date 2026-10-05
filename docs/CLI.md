@@ -276,6 +276,7 @@ from the daemon.
 | `KRAB_PYTHON` | same as `--python` for compile (that interpreter as it is, instead of the venv krab builds); for Python resolvers it overrides `inventory.python-resolvers.python` in `.kapitan` (the per-machine override of a shared setting) |
 | `KRAB_PYTHON_REQUIREMENTS` | specifiers added to the venv krab builds, for this machine only, one per line: `kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or `-e /home/me/kadet` for an editable checkout. A named `kadet` or `jinja2` replaces krab's baseline entry |
 | `RUST_LOG` | log filter (`krab_server=debug`, ...) |
+| `KRAB_LOG_FORMAT` | log line format on stderr: `logfmt` (default) or `json` (one object per line); a daemon the CLI starts inherits it |
 
 The `KAPITAN_*` spellings of the first four (`KAPITAN_PYTHON`, ...) still
 work in this release and print a note; they go away in the next.

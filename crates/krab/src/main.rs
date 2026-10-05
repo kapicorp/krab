@@ -101,6 +101,38 @@ fn accept_old_env_names() {
     }
 }
 
+/// Logs go to stderr as logfmt, or as one JSON object per line with
+/// `KRAB_LOG_FORMAT=json`. A daemon the CLI starts inherits the variable.
+fn init_logging(filter: tracing_subscriber::EnvFilter, format: Option<&str>) {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let registry = tracing_subscriber::registry().with(filter);
+    if format == Some("json") {
+        registry
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .flatten_event(true)
+                    .with_writer(std::io::stderr),
+            )
+            .init();
+        return;
+    }
+    registry
+        .with(
+            tracing_logfmt::builder()
+                .layer()
+                .with_writer(std::io::stderr),
+        )
+        .init();
+    if let Some(other) = format.filter(|f| *f != "logfmt") {
+        tracing::warn!(
+            value = other,
+            "unknown KRAB_LOG_FORMAT, using logfmt (logfmt or json)"
+        );
+    }
+}
+
 fn main() -> ExitCode {
     // Piping into `head` must not panic: die quietly on SIGPIPE like other CLIs.
     // SAFETY: the start of main, before any thread is spawned.
@@ -119,10 +151,10 @@ fn main() -> ExitCode {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         tracing_subscriber::EnvFilter::new(if foreground_server { "info" } else { "warn" })
     });
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(std::io::stderr)
-        .init();
+    let format = std::env::var("KRAB_LOG_FORMAT")
+        .ok()
+        .filter(|f| !f.is_empty());
+    init_logging(filter, format.as_deref());
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Diagnostics(ds, json)) => {

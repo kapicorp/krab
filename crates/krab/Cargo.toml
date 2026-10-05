@@ -26,6 +26,7 @@ tracing = { workspace = true }
 parking_lot = { workspace = true }
 libc = { workspace = true }
 tracing-subscriber = { workspace = true }
+tracing-logfmt = { workspace = true }
 
 [lints]
 workspace = true
