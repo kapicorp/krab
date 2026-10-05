@@ -56,10 +56,11 @@ The binary is called `krab`, so it sits next to the Python `kapitan` without
 a clash; keep the reference implementation around for the input types that
 are not native yet.
 
-Compiling `kadet` components needs a Python 3 on the machine: krab builds
-itself a venv with `kadet`, `jinja2` and the packages the repository declares
-in `.kapitan` (see [Compiling](#compiling)). The Python `kapitan` is not
-required. A repository's `resolvers.py` runs in Python too (see [Python
+Compiling `kadet` components needs Python 3.10 or newer (kadet's minimum)
+on the machine: krab builds itself a venv with `kadet`, `jinja2` and the
+packages the repository declares in `.kapitan` (see [Compiling](#compiling)).
+The Python `kapitan` is not required. A repository's `resolvers.py` runs in
+Python too, with the same minimum (see [Python
 resolvers](#python-resolvers)). Nothing else needs Python.
 
 ## Quick start

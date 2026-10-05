@@ -96,6 +96,14 @@ def install_hooks(recorder):
     io.open = rec_io_open
     os.scandir = rec_scandir
     os.listdir = rec_listdir
+    # Python 3.10's pathlib calls these through class attributes of
+    # _NormalAccessor, where a plain function would bind to the instance.
+    import pathlib
+
+    accessor = getattr(pathlib, "_NormalAccessor", None)
+    if accessor is not None:
+        for name, fn in (("open", rec_io_open), ("scandir", rec_scandir), ("listdir", rec_listdir)):
+            setattr(accessor, name, staticmethod(fn))
 
     # The import system reads sources through the loader, not `open`; a
     # cached .pyc means the .py is never even read, so map it back.
