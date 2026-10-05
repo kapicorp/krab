@@ -4,6 +4,7 @@
 //! Used by the Python resolvers ([`crate::resolvers::python`]) and by the
 //! compile crate's kadet and kapitan runners.
 
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -57,12 +58,51 @@ impl PythonCmd {
     }
 
     /// Interpreters to try, in order: `$KRAB_PYTHON` (the per-machine
-    /// override), else `explicit` (from the shared `.kapitan`); a kapitan PEX
-    /// on `$PATH` (run as an interpreter); then `python3`.
+    /// override), else `explicit` (from the shared `.kapitan`); the Python
+    /// of `$VIRTUAL_ENV`, of `$CONDA_PREFIX`, and of a `.venv` in the
+    /// working directory or a parent up to the repository root; a kapitan
+    /// PEX on `$PATH` (run as an interpreter); then `python3`.
     pub fn candidates(explicit: Option<&str>) -> Vec<PythonCmd> {
+        let project = std::env::current_dir().unwrap_or_default();
+        Self::candidates_in(explicit, &project, &|k| std::env::var_os(k))
+    }
+
+    /// [`PythonCmd::candidates`] for the project in `project`, reading the
+    /// environment through `var`.
+    fn candidates_in(
+        explicit: Option<&str>,
+        project: &Path,
+        var: &dyn Fn(&str) -> Option<OsString>,
+    ) -> Vec<PythonCmd> {
         let mut candidates = Vec::new();
-        if let Some(c) = PythonCmd::explicit(explicit) {
+        if let Some(c) = PythonCmd::explicit_in(explicit, var) {
             candidates.push(c);
+        }
+        // The nearest `.venv`, not looking past the repository root.
+        let mut dot_venv = None;
+        for dir in project.ancestors() {
+            if dir.join(".venv/bin/python").is_file() {
+                dot_venv = Some(dir.join(".venv"));
+                break;
+            }
+            if dir.join(".git").exists() {
+                break;
+            }
+        }
+        let venvs = ["VIRTUAL_ENV", "CONDA_PREFIX"]
+            .into_iter()
+            .filter_map(|k| var(k).filter(|v| !v.is_empty()).map(PathBuf::from))
+            .chain(dot_venv);
+        for venv in venvs {
+            let program = venv.join("bin/python");
+            if program.is_file() && !candidates.iter().any(|c| c.program == program) {
+                candidates.push(PythonCmd {
+                    description: program.display().to_string(),
+                    program,
+                    args: vec![],
+                    env: vec![],
+                });
+            }
         }
         if let Some(pex) = find_pex_on_path() {
             candidates.push(PythonCmd {
@@ -84,8 +124,15 @@ impl PythonCmd {
     /// The interpreter the user named: `$KRAB_PYTHON` (the per-machine
     /// override), else `explicit` (from the shared `.kapitan` or a flag).
     pub fn explicit(explicit: Option<&str>) -> Option<PythonCmd> {
-        let spec = std::env::var("KRAB_PYTHON")
-            .ok()
+        Self::explicit_in(explicit, &|k| std::env::var_os(k))
+    }
+
+    fn explicit_in(
+        explicit: Option<&str>,
+        var: &dyn Fn(&str) -> Option<OsString>,
+    ) -> Option<PythonCmd> {
+        let spec = var("KRAB_PYTHON")
+            .and_then(|s| s.into_string().ok())
             .filter(|s| !s.trim().is_empty())
             .or_else(|| explicit.map(str::to_string))?;
         PythonCmd::parse(&spec)
@@ -333,5 +380,90 @@ mod tests {
         assert_eq!(c.program, PathBuf::from("/usr/local/bin/kapitan"));
         assert_eq!(c.args, vec!["-u".to_string()]);
         assert!(PythonCmd::parse("   ").is_none());
+    }
+
+    /// Creates `<root>/<rel>/bin/python` and returns `<root>/<rel>`.
+    fn venv(root: &Path, rel: &str) -> PathBuf {
+        let dir = root.join(rel);
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join("bin/python"), "").unwrap();
+        dir
+    }
+
+    fn order(explicit: Option<&str>, project: &Path, vars: &[(&str, &Path)]) -> Vec<String> {
+        let var = |k: &str| {
+            vars.iter()
+                .find(|(name, _)| *name == k)
+                .map(|(_, v)| v.as_os_str().to_owned())
+        };
+        PythonCmd::candidates_in(explicit, project, &var)
+            .into_iter()
+            .map(|c| c.description)
+            .filter(|d| !d.starts_with("PEX_INTERPRETER="))
+            .collect()
+    }
+
+    #[test]
+    fn candidates_follow_the_explicit_setting_then_the_environments() {
+        let root = std::env::temp_dir().join(format!("krab-candidates-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let active = venv(&root, "active");
+        let conda = venv(&root, "conda");
+        let dot_venv = venv(&root, "repo/.venv");
+        std::fs::create_dir_all(root.join("repo/.git")).unwrap();
+        let project = root.join("repo/sub/dir");
+        std::fs::create_dir_all(&project).unwrap();
+        let python = |d: &Path| d.join("bin/python").display().to_string();
+
+        assert_eq!(
+            order(
+                Some("/opt/py"),
+                &project,
+                &[("VIRTUAL_ENV", &active), ("CONDA_PREFIX", &conda)]
+            ),
+            vec![
+                "/opt/py".to_string(),
+                python(&active),
+                python(&conda),
+                python(&dot_venv),
+                "python3".to_string()
+            ]
+        );
+        // `$KRAB_PYTHON` wins over the `.kapitan` setting; an environment
+        // that is also the project's `.venv` is listed once.
+        assert_eq!(
+            order(
+                Some("/opt/py"),
+                &project,
+                &[
+                    ("KRAB_PYTHON", Path::new("/usr/bin/python3.12")),
+                    ("VIRTUAL_ENV", &dot_venv)
+                ]
+            ),
+            vec![
+                "/usr/bin/python3.12".to_string(),
+                python(&dot_venv),
+                "python3".to_string()
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_venv_above_the_repository_root_or_without_python_is_skipped() {
+        let root = std::env::temp_dir().join(format!("krab-candidates-out-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        venv(&root, ".venv");
+        std::fs::create_dir_all(root.join("repo/.git")).unwrap();
+        std::fs::create_dir_all(root.join("empty")).unwrap();
+        assert_eq!(
+            order(
+                None,
+                &root.join("repo"),
+                &[("VIRTUAL_ENV", &root.join("empty"))]
+            ),
+            vec!["python3".to_string()]
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -252,7 +252,7 @@ name. Settings, all optional, in `.kapitan`:
 inventory:
   python-resolvers:
     file: system/omegaconf/resolvers/resolvers.py  # explicit path; `python-resolvers: false` disables
-    python: /opt/venv/bin/python                    # $KRAB_PYTHON overrides; default: a kapitan PEX on PATH, python3
+    python: /opt/venv/bin/python                    # $KRAB_PYTHON overrides; default: $VIRTUAL_ENV, $CONDA_PREFIX, the nearest .venv up to the repo root, a kapitan PEX on PATH, python3
     prefer-native: true                             # keep krab's Rust resolvers for names both define
     workers: 4                                      # concurrent Python processes (default: CPUs, at most 8)
 ```

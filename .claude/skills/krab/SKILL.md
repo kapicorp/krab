@@ -94,7 +94,7 @@ the omegaconf backend did, configured in `.kapitan`:
 inventory:
   python-resolvers:
     file: system/omegaconf/resolvers/resolvers.py
-    python: /opt/venv/bin/python    # $KRAB_PYTHON overrides this; default: a kapitan PEX on PATH, python3
+    python: /opt/venv/bin/python    # $KRAB_PYTHON overrides this; default: $VIRTUAL_ENV, $CONDA_PREFIX, the nearest .venv up to the repo root, a kapitan PEX on PATH, python3
     prefer-native: true             # keep krab's Rust ports for names both define (faster)
     workers: 4
 ```
