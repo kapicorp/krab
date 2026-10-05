@@ -72,6 +72,8 @@ pub struct DotKapitan {
     pub inventory: Map,
     /// The raw `refs:` section.
     pub refs: Map,
+    /// The raw `global:` section, the fallback for every other section.
+    pub global: Map,
 }
 
 impl DotKapitan {
@@ -100,6 +102,11 @@ impl DotKapitan {
                 .and_then(Node::as_map)
                 .cloned()
                 .unwrap_or_default(),
+            global: node
+                .get("global")
+                .and_then(Node::as_map)
+                .cloned()
+                .unwrap_or_default(),
             ..Default::default()
         };
         let section = |name: &str| node.get(name).and_then(Node::as_map);
@@ -123,7 +130,7 @@ impl DotKapitan {
         }
         cfg.legacy_backend_key =
             section("inventory_backend").is_some_and(|m| m.get("inventory-backend").is_none());
-        if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
+        if let Some(Value::Int(i)) = get(&["inventory", "global"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
         }
         if let Some(n) = cfg.inventory.get("python-resolvers") {
@@ -151,9 +158,14 @@ impl DotKapitan {
         ))
     }
 
+    /// kapitan's `from_dot_kapitan`: the command's section, then `global`.
+    fn setting<'a>(&'a self, section: &'a Map, key: &str) -> Option<&'a Node> {
+        section.get(key).or_else(|| self.global.get(key))
+    }
+
     /// A string list from the compile section (`search-paths`).
     pub fn compile_strings(&self, key: &str) -> Option<Vec<String>> {
-        match &self.compile.get(key)?.value {
+        match &self.setting(&self.compile, key)?.value {
             Value::List(l) => Some(
                 l.iter()
                     .filter_map(|n| n.as_str().map(str::to_string))
@@ -165,37 +177,34 @@ impl DotKapitan {
     }
 
     pub fn compile_str(&self, key: &str) -> Option<String> {
-        self.compile
-            .get(key)
+        self.setting(&self.compile, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
 
     pub fn compile_bool(&self, key: &str) -> Option<bool> {
-        match self.compile.get(key)?.value {
+        match self.setting(&self.compile, key)?.value {
             Value::Bool(b) => Some(b),
             _ => None,
         }
     }
 
     pub fn compile_int(&self, key: &str) -> Option<i64> {
-        match self.compile.get(key)?.value {
+        match self.setting(&self.compile, key)?.value {
             Value::Int(i) => Some(i),
             _ => None,
         }
     }
 
     pub fn inventory_str(&self, key: &str) -> Option<String> {
-        self.inventory
-            .get(key)
+        self.setting(&self.inventory, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
 
     /// A string from the refs section (`refs-path`).
     pub fn refs_str(&self, key: &str) -> Option<String> {
-        self.refs
-            .get(key)
+        self.setting(&self.refs, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
@@ -226,6 +235,34 @@ mod tests {
             Some("literal")
         );
         assert_eq!(dot.python_resolvers, PythonResolverSettings::default());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn section_keys_fall_back_to_global() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-global-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "global:\n  output-path: out\n  prune: true\n  indent: 4\n  search-paths: [lib]\n  refs-path: secrets\n  multiline-string-style: literal\ncompile:\n  output-path: build\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        // The command's section wins over `global`.
+        assert_eq!(dot.compile_str("output-path").as_deref(), Some("build"));
+        assert_eq!(dot.compile_bool("prune"), Some(true));
+        assert_eq!(dot.compile_int("indent"), Some(4));
+        assert_eq!(
+            dot.compile_strings("search-paths"),
+            Some(vec!["lib".to_string()])
+        );
+        assert_eq!(dot.compile_str("refs-path").as_deref(), Some("secrets"));
+        assert_eq!(dot.indent, Some(4));
+        assert_eq!(
+            dot.inventory_str("multiline-string-style").as_deref(),
+            Some("literal")
+        );
+        assert_eq!(dot.refs_str("refs-path").as_deref(), Some("secrets"));
         let _ = std::fs::remove_dir_all(dir);
     }
 
