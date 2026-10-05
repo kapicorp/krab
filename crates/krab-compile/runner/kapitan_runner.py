@@ -19,9 +19,14 @@ import traceback
 RUNNER_PROTOCOL = 1
 
 
+# Replies go to a duplicate of fd 1. main() then points fd 1 at stderr, so a
+# child process, C code or os.write(1, ...) cannot corrupt the protocol.
+PROTO = sys.__stdout__
+
+
 def respond(obj):
-    sys.__stdout__.write(json.dumps(obj) + "\n")
-    sys.__stdout__.flush()
+    PROTO.write(json.dumps(obj) + "\n")
+    PROTO.flush()
 
 
 class Recorder:
@@ -395,6 +400,9 @@ def op_compile(req):
 
 
 def main():
+    global PROTO
+    PROTO = os.fdopen(os.dup(1), "w")
+    os.dup2(2, 1)
     # Anything user code prints must not corrupt the protocol stream.
     sys.stdout = sys.stderr
     for line in sys.__stdin__:

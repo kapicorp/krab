@@ -251,3 +251,35 @@ fn nested_python_calls_do_not_deadlock() {
     assert_eq!(rendered.unwrap_or_else(|e| panic!("{e}")), "HELLO");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A resolver that writes to file descriptor 1 directly (a child process,
+/// `os.write`) must not corrupt the worker's reply stream.
+#[test]
+fn a_resolver_writing_to_fd_1_still_renders() {
+    if !python_has(&[], "sys") {
+        eprintln!("python3 not available; skipping");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("krab-resolver-stdout-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("inventory/targets")).unwrap();
+    std::fs::write(
+        dir.join("resolvers.py"),
+        "import os, subprocess\n\
+         def noisy(s):\n    subprocess.run(['echo', 'x'], check=True)\n    os.write(1, b'x')\n    return s.upper()\n\
+         def pass_resolvers():\n    return {'noisy': noisy}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("inventory/targets/t.yml"),
+        "parameters:\n  r: ${noisy:abc}\n",
+    )
+    .unwrap();
+    let registry = registry_with(dir.join("resolvers.py"), "python3", false);
+    let inv = Inventory::new(
+        InventoryConfig::new(dir.join("inventory")),
+        Arc::new(registry),
+    );
+    let t = inv.render_named("t").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(at(&t.parameters, &["r"]).value.py_str(), "ABC");
+    let _ = std::fs::remove_dir_all(dir);
+}

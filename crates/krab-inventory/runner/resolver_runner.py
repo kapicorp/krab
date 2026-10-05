@@ -40,9 +40,14 @@ RUNNER_PROTOCOL = 1
 _MISSING = object()
 
 
+# Replies go to a duplicate of fd 1. main() then points fd 1 at stderr, so a
+# child process, C code or os.write(1, ...) cannot corrupt the protocol.
+PROTO = sys.__stdout__
+
+
 def respond(obj):
-    sys.__stdout__.write(json.dumps(obj) + "\n")
-    sys.__stdout__.flush()
+    PROTO.write(json.dumps(obj) + "\n")
+    PROTO.flush()
 
 
 class HostError(Exception):
@@ -490,6 +495,9 @@ def op_call(req):
 
 
 def main():
+    global PROTO
+    PROTO = os.fdopen(os.dup(1), "w")
+    os.dup2(2, 1)
     sys.stdout = sys.stderr  # user code prints must not corrupt the protocol
     while True:
         line = sys.__stdin__.readline()
