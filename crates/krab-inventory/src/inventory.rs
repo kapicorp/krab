@@ -86,6 +86,8 @@ impl TargetSpec {
 pub struct ClassResolution {
     pub found: Option<PathBuf>,
     pub tried: Vec<PathBuf>,
+    /// `found` is one of the two reclass compatibility candidates.
+    pub fallback: bool,
 }
 
 /// A parsed file, cached by path with its content digest.
@@ -116,6 +118,9 @@ pub struct ClassClosure {
     /// Every path that was checked while resolving class names (hits and
     /// misses). Creating a file at one of these can change the render.
     pub probes: Vec<PathBuf>,
+    /// Class names resolved through a reclass compatibility fallback, here
+    /// and in the included classes, one per class reference.
+    pub warnings: Vec<Diagnostic>,
     pub log: Arc<Vec<MergeEvent>>,
 }
 
@@ -477,18 +482,23 @@ impl Inventory {
                 with_ext(&compat, ext),
                 compat.join(format!("init.{ext}")),
             ];
-            for case in cases {
+            for (i, case) in cases.into_iter().enumerate() {
                 let hit = case.is_file();
                 tried.push(case.clone());
                 if hit {
                     return ClassResolution {
                         found: Some(case),
                         tried,
+                        fallback: i >= 2,
                     };
                 }
             }
         }
-        ClassResolution { found: None, tried }
+        ClassResolution {
+            found: None,
+            tried,
+            fallback: false,
+        }
     }
 
     fn class_closure(&self, file: &Path, stack: &mut Vec<PathBuf>) -> Result<Arc<ClassClosure>> {
@@ -530,6 +540,7 @@ impl Inventory {
         let mut exports = Node::map(Origin::SYNTHETIC);
         let mut files = vec![file.to_path_buf()];
         let mut probes: Vec<PathBuf> = Vec::new();
+        let mut warnings: Vec<Diagnostic> = Vec::new();
         let mut own_log: Vec<MergeEvent> = Vec::new();
         let mut log = if self.cfg.track_provenance {
             Some(&mut own_log)
@@ -538,6 +549,14 @@ impl Inventory {
         };
         let mut nested_logs: Vec<Arc<Vec<MergeEvent>>> = Vec::new();
         let deref = EvalDeref { inv: self };
+        let classes_dir = self.cfg.classes_dir();
+        let inventory_dir = classes_dir.parent().unwrap_or(&classes_dir);
+        let rel = |p: &Path| {
+            p.strip_prefix(inventory_dir)
+                .unwrap_or(p)
+                .display()
+                .to_string()
+        };
         for class_ref in &doc.classes {
             let resolution = self.resolve_class_file(&class_ref.name, file);
             for p in &resolution.tried {
@@ -568,6 +587,35 @@ impl Inventory {
                     )));
                 }
             };
+            if resolution.fallback {
+                // Nothing of the name is left (`classes/init.yml`,
+                // `<inventory>/classes.yml`): this cannot be the class meant (D23).
+                let unrelated = ["yml", "yaml"].iter().any(|ext| {
+                    class_file == classes_dir.join(format!("init.{ext}"))
+                        || class_file == with_ext(&classes_dir, ext)
+                });
+                let later = if unrelated {
+                    "; this will be an `inventory::class_not_found` error in a later release"
+                } else {
+                    ""
+                };
+                let expected: Vec<String> = resolution.tried[..2]
+                    .iter()
+                    .map(|p| format!("  {}", p.display()))
+                    .collect();
+                warnings.push(
+                    Diagnostic::warning(
+                        "inventory::class_fallback",
+                        format!(
+                            "class `{}` resolved through a reclass compatibility fallback to `{}`{later}",
+                            class_ref.name,
+                            rel(&class_file)
+                        ),
+                    )
+                    .with_label(class_ref.origin, "referenced here")
+                    .with_help(format!("looked for:\n{}", expected.join("\n"))),
+                );
+            }
             if stack.contains(&class_file) {
                 // The reference recurses forever here; we stop with a clear error.
                 return Err(Error::new(
@@ -602,6 +650,12 @@ impl Inventory {
                     probes.push(p.clone());
                 }
             }
+            for w in &closure.warnings {
+                let at = |d: &Diagnostic| d.labels.first().map(|l| l.origin);
+                if !warnings.iter().any(|x| at(x) == at(w)) {
+                    warnings.push(w.clone());
+                }
+            }
             nested_logs.push(closure.log.clone());
         }
         if !doc.parameters.as_map().is_some_and(|m| m.is_empty()) {
@@ -622,6 +676,7 @@ impl Inventory {
             exports,
             files,
             probes,
+            warnings,
             log: Arc::new(combined),
         })
     }
@@ -645,10 +700,14 @@ impl Inventory {
             exports,
             files,
             probes,
+            warnings,
             log,
         } = closure;
 
-        let mut warnings = Vec::new();
+        let mut warnings: Vec<Diagnostic> = warnings
+            .into_iter()
+            .map(|w| w.with_target(&spec.name))
+            .collect();
         let resolutions = {
             let mut ev = Evaluator::new(
                 &mut params,
@@ -844,5 +903,51 @@ mod tests {
         let tree = Tree::new("conflict", &["a/x.yml", "b/x.yml"]);
         let err = tree.inventory(false).discover_targets().unwrap_err();
         assert_eq!(err.diagnostic().code, "inventory::conflicting_targets");
+    }
+
+    #[test]
+    fn a_class_found_through_a_reclass_fallback_warns() {
+        let tree = Tree::new("fallback", &[]);
+        let write = |f: &str, text: &str| {
+            let path = tree.0.join(f);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        };
+        write("classes/common.yml", "parameters:\n  common: 1\n");
+        write("classes/init.yml", "parameters:\n  root: 1\n");
+        write("classes/app/web.yml", "parameters:\n  web: 1\n");
+        write("targets/ok.yml", "classes:\n  - app.web\n");
+        write("targets/legacy.yml", "classes:\n  - team.legacy.common\n");
+        write("targets/typo.yml", "classes:\n  - componets.nginx\n");
+        let inv = tree.inventory(false);
+
+        assert!(inv.render_named("ok").unwrap().warnings.is_empty());
+
+        // Output is kapitan's: `classes/common.yml` is merged, with a warning.
+        let legacy = inv.render_named("legacy").unwrap();
+        assert!(legacy.parameters.get("common").is_some());
+        let [w] = legacy.warnings.as_slice() else {
+            panic!("{:?}", legacy.warnings)
+        };
+        assert_eq!(w.code, "inventory::class_fallback");
+        assert!(w.message.contains("`team.legacy.common`"), "{}", w.message);
+        assert!(w.message.contains("common.yml"), "{}", w.message);
+        let help = w.help.as_deref().unwrap();
+        assert!(help.contains("team/legacy/common.yml"), "{help}");
+
+        // kapitan loads `classes/init.yml` for this typo; so does krab, for now (D23).
+        let typo = inv.render_named("typo").unwrap();
+        assert!(typo.parameters.get("root").is_some());
+        let [w] = typo.warnings.as_slice() else {
+            panic!("{:?}", typo.warnings)
+        };
+        assert_eq!(w.code, "inventory::class_fallback");
+        assert!(w.message.contains("`classes/init.yml`"), "{}", w.message);
+        assert!(
+            w.message.contains("error in a later release"),
+            "{}",
+            w.message
+        );
+        assert!(!legacy.warnings[0].message.contains("later release"));
     }
 }

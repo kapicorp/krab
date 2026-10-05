@@ -58,7 +58,11 @@ says nothing (`docs/DECISIONS.md`, D7).
 
 `Inventory::resolve_class_file` mirrors the reference exactly, including its
 two "reclass compatibility" fallbacks that drop the first two name components.
-Relative names (`.foo`) resolve against the including class' directory.
+A hit on a fallback is an `inventory::class_fallback` warning naming the file
+used and the paths expected; for a hit on `classes/init.yml` or
+`<inventory>/classes.yml` it also says this becomes an error in a later
+release (D23). Relative names (`.foo`) resolve against the including class'
+directory.
 
 For each file the loader builds a `ClassClosure`: its classes' closures merged
 in order, then its own parameters. Merging is associative, so closures are
