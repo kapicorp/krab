@@ -15,7 +15,8 @@ One issue, one branch, one PR.
 3. Implement, then run `cargo test --release`, plus the parity check below for
    anything that touches the engine.
 4. A deliberate difference from the reference gets a row in
-   `docs/DECISIONS.md` in the same PR. Otherwise it is a bug.
+   `docs/DECISIONS.md` in the same PR. On the surfaces that must stay
+   byte-identical (listed there), an unlisted difference is a bug.
 
 ## Build
 
