@@ -119,3 +119,67 @@ fn single_target_render_touches_only_its_closure() {
         "misses are recorded"
     );
 }
+
+/// Registered resolvers the fixture inventory does not call yet. A name
+/// leaves this list when a fixture case calls it; the test fails while a
+/// name here is called or no longer registered.
+const UNCALLED_RESOLVERS: &[&str] = &[
+    "oc.env",
+    "oc.decode",
+    "oc.create",
+    "oc.deprecated",
+    "access",
+    "yaml",
+    "from_file",
+    "filename",
+    "parent_filename",
+    "path",
+    "parent_path",
+    "to_csv",
+    "pluck",
+    "nested_dict_to_list_of_dicts",
+    "select_fields",
+    "filter_keys",
+    "join",
+    "join_quoted",
+];
+
+fn read_tree(dir: &std::path::Path, out: &mut String) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            read_tree(&path, out);
+        } else {
+            out.push_str(&std::fs::read_to_string(&path).unwrap());
+        }
+    }
+}
+
+#[test]
+fn every_registered_resolver_is_called_by_the_fixture() {
+    let mut text = String::new();
+    for dir in ["classes", "targets"] {
+        read_tree(&fixtures().join("inventory").join(dir), &mut text);
+    }
+    let called = |name: &str| {
+        text.contains(&format!("${{{name}:")) || text.contains(&format!("${{{name}}}"))
+    };
+    let registered = krab_inventory::resolvers::Registry::with_builtins().names();
+    let uncalled: Vec<&String> = registered
+        .iter()
+        .filter(|n| !called(n) && !UNCALLED_RESOLVERS.contains(&n.as_str()))
+        .collect();
+    assert!(
+        uncalled.is_empty(),
+        "registered resolvers no class or target under tests/fixtures/inventory calls: {uncalled:?}\n\
+         Add a fixture case (tests/fixtures/README.md) or, for a krab-only resolver, list it in UNCALLED_RESOLVERS."
+    );
+    let stale: Vec<&&str> = UNCALLED_RESOLVERS
+        .iter()
+        .filter(|n| called(n) || !registered.iter().any(|r| r == *n))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "UNCALLED_RESOLVERS names resolvers that are called by the fixture or not registered: {stale:?}"
+    );
+}

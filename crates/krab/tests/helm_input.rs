@@ -1,7 +1,8 @@
 //! `input_type: helm` compiles natively and matches kapitan 0.36.3 on the
 //! fixture chart (`tests/fixtures/helm`, expected output in
 //! `tests/fixtures/helm-expected/compiled`). Needs a `helm` v3 binary; skips
-//! without one.
+//! without one. In CI it fails instead on Linux, whose GitHub runner image
+//! ships helm; the macOS image has none, so it still skips there.
 #![allow(clippy::print_stderr)]
 
 use std::path::{Path, PathBuf};
@@ -12,6 +13,16 @@ fn have_helm() -> bool {
         .args(["version", "--short"])
         .output()
         .is_ok_and(|o| o.status.success())
+}
+
+/// Report why the test does not run. In CI on Linux a missing helm is a
+/// failure, so a broken runner cannot turn the test into a silent pass.
+fn skip(why: &str) {
+    assert!(
+        std::env::var_os("CI").is_none() || !cfg!(target_os = "linux"),
+        "{why}, and CI must run this test"
+    );
+    eprintln!("{why}; skipping");
 }
 
 fn fixtures() -> PathBuf {
@@ -45,7 +56,7 @@ fn files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
 #[test]
 fn helm_input_matches_the_reference() {
     if !have_helm() {
-        eprintln!("helm not available; skipping");
+        skip("helm not available");
         return;
     }
     let dir = std::env::temp_dir().join(format!("krab-helm-input-{}", std::process::id()));
@@ -93,7 +104,7 @@ fn compile(dir: &Path) -> std::process::Output {
 #[test]
 fn an_edited_chart_template_makes_the_target_stale() {
     if !have_helm() {
-        eprintln!("helm not available; skipping");
+        skip("helm not available");
         return;
     }
     let dir = std::env::temp_dir().join(format!("krab-helm-stale-{}", std::process::id()));

@@ -1780,4 +1780,29 @@ mod tests {
             }
         }
     }
+
+    /// Rendering runs the inventory model before fetch parses anything, so a
+    /// type the parser knows but `dependency_fields` in krab-inventory's
+    /// `model.rs` does not fails every target that declares it.
+    #[test]
+    fn every_kind_is_accepted_by_the_inventory_model() {
+        let items = json!([
+            {"type": "git", "source": "https://example.com/r.git", "output_path": "g"},
+            {"type": "http", "source": "https://example.com/f", "output_path": "h"},
+            {"type": "https", "source": "https://example.com/f", "output_path": "s"},
+            {"type": "helm", "source": "https://example.com/charts", "chart_name": "c", "output_path": "c"},
+            {"type": "oci", "source": "example.com/a:1", "output_path": "o"},
+        ]);
+        for dep in dependencies("t", &items, Path::new("/out")).unwrap() {
+            // A new `Kind` stops compiling here until it has an item above.
+            match dep.kind {
+                Kind::Git { .. } | Kind::Http { .. } | Kind::Helm { .. } | Kind::Oci { .. } => {}
+            }
+        }
+        let yaml = format!("kapitan:\n  dependencies: {items}\n");
+        let mut params =
+            krab_inventory::yaml::parse_document(&yaml, krab_inventory::SourceId::SYNTHETIC)
+                .unwrap();
+        krab_inventory::model::normalize(&mut params, "t").unwrap();
+    }
 }

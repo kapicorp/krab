@@ -6,6 +6,7 @@
 //! * `inventory.targets` → [`TargetsResult`]
 //! * `inventory.target` ([`TargetParams`]) → [`TargetResult`]
 //! * `inventory.all` → [`AllResult`]
+//! * `inventory.class_usage` → `Vec<ClassUsage>`
 //! * `inventory.classes` ([`TargetParams`]) → `Vec<String>`
 //! * `inventory.explain` ([`ExplainParams`]) → `Explanation`
 //! * `inventory.deps` ([`DepsParams`]) → `Vec<String>`

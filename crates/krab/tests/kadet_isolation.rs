@@ -28,6 +28,16 @@ const TARGET: &str = "parameters:
           - components/shared
 ";
 
+/// Report why the test does not run. CI installs what these tests need, so
+/// there a skip is a failure rather than a silent pass.
+fn skip(why: &str) {
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "{why}, and CI must run this test"
+    );
+    eprintln!("{why}; skipping");
+}
+
 #[test]
 fn a_full_compile_gives_each_target_its_own_evaluator() {
     if !Command::new("python3")
@@ -35,7 +45,7 @@ fn a_full_compile_gives_each_target_its_own_evaluator() {
         .output()
         .is_ok_and(|o| o.status.success())
     {
-        eprintln!("python3 with kadet not available; skipping");
+        skip("python3 with kadet not available");
         return;
     }
     let dir = std::env::temp_dir().join(format!("krab-kadet-isolation-{}", std::process::id()));

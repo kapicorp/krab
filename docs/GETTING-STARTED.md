@@ -25,10 +25,8 @@ for comparison and for the input types that are not native yet.
 ## 2. Point it at an inventory
 
 Run every command from the directory holding `.kapitan` (the same place you
-run the Python `kapitan` from). krab reads the same keys of `.kapitan`:
-`inventory-path`, `compose-target-name`, `compile.search-paths`,
-`compile.output-path`, `compile.indent` and
-`compile.yaml-multiline-string-style`. Without a `.kapitan` the inventory is
+run the Python `kapitan` from). The `.kapitan` keys krab reads are in the
+[CLI reference](CLI.md#kapitan). Without a `.kapitan` the inventory is
 `./inventory` and the output goes to `./compiled`.
 
 ```sh
@@ -158,7 +156,7 @@ krab compile --force && git status --short compiled     # prints nothing
 
 ### Python for kadet
 
-`jinja2`, `copy`, `remove` and `external` inputs, output formatting, ref
+`jinja2`, `helm`, `copy`, `remove` and `external` inputs, output formatting, ref
 embedding and file writing are native. `kadet` components are Python, so a
 Python with `kadet` importable is needed to run them (plus `jinja2` for
 templates and whatever the components themselves import); the Python
@@ -188,8 +186,9 @@ which provides the API components import (`kapitan.inputs.kadet`,
 targets from the daemon on demand and reports which files and modules it
 read so the next compile knows exactly what to invalidate.
 
-For input types that are not native yet (`jsonnet`, `kustomize`,
-`cuelang`) run `krab compile --backend python`,
+For input types that are not native yet
+([open deviations](specs/inputs-and-output.md#open-deviations)) run
+`krab compile --backend python`,
 which drives kapitan's own input types in a worker process with the same
 incremental bookkeeping, or use the Python `kapitan` for those targets.
 

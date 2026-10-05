@@ -1,6 +1,6 @@
 ---
 name: krab
-description: How to operate krab, the Rust Kapitan (github.com/kapicorp/krab, binary `krab`): render and inspect an inventory through its daemon, explain where a value came from, find what a file affects, run Python resolvers from resolvers.py, compile incrementally, run the language server, verify parity against the Python `kapitan`, and rebuild after engine changes. Use whenever krab, kapitan2 or the Rust kapitan is mentioned, when working in a krab checkout, or when inspecting or changing `grid/inventory` and a faster or more informative tool than `kapitan` helps.
+description: How to operate krab, the Rust Kapitan (github.com/kapicorp/krab, binary `krab`): render and inspect an inventory through its daemon, explain where a value came from, find what a file affects, run Python resolvers from resolvers.py, compile incrementally, run the language server, verify parity against the Python `kapitan`, and rebuild after engine changes. Use whenever krab, kapitan2 or the Rust kapitan is mentioned, when working in a krab checkout, or when inspecting or changing a Kapitan inventory and a faster or more informative tool than `kapitan` helps.
 ---
 
 # krab
@@ -8,23 +8,17 @@ description: How to operate krab, the Rust Kapitan (github.com/kapicorp/krab, bi
 `krab` is the from-scratch Rust Kapitan. It reads the same `.kapitan`,
 `inventory/targets`, `inventory/classes` and `resolvers.py` and produces the
 same inventory and compiled output as kapitan 0.36.3, only faster and with
-provenance. Run it from the directory holding `.kapitan` (in the platform
-repo: `grid`).
+provenance. Run it from the directory holding `.kapitan`.
 
 - Source: `github.com/kapicorp/krab` (cargo workspace). Design in
   `docs/DESIGN.md`, flags in `docs/CLI.md`, open work on the GitHub project
-  board (linked from `docs/ROADMAP.md`). Local checkouts are git worktrees
-  under `/home/coder/krab/<branch-name>`.
-- Binary: `krab` (releases before 2.0.0-alpha.4 shipped it as `kapitan`).
-  The release is installed by mise (`github:kapicorp/krab`, prerelease, in
-  `~/.config/mise/config.toml`; the `rename_exe = "krab"` there is only
-  needed for those older releases; the shim resolves only under
-  `/home/coder`, use
-  `~/.local/share/mise/installs/github-kapicorp-krab/<version>/krab` from
-  elsewhere). A development build is `target/release/krab` in its
-  worktree; every build keeps its own daemon, so both can run side by side.
-- Reference: `/usr/local/bin/kapitan` is the Python kapitan (a PEX). Keep
-  using it for anything krab does not do yet (see "Not yet native").
+  board (linked from `docs/ROADMAP.md`).
+- Binary: `krab` (releases before 2.0.0-alpha.4 shipped it as `kapitan`),
+  from a release archive or `cargo build --release`. A development build is
+  `target/release/krab` in its checkout; every build keeps its own daemon,
+  so a release and a development build can run side by side.
+- Reference: the Python `kapitan`. Keep using it for anything krab does not
+  do yet (see Compile).
 
 ## Mental model
 
@@ -39,22 +33,22 @@ newer binary gets a socket of its own and never touches another build's
 daemon; `krab server stop` stops every build's daemon for the inventory.
 
 Target names are dotted paths of the target file:
-`inventory/targets/platform/mcps/grafana.yml` is `platform.mcps.grafana`.
+`inventory/targets/team/app/prod.yml` is `team.app.prod`.
 
 ## Inspect the inventory
 
 ```bash
 krab inventory targets                         # table: labels, classes, inputs, status
 krab inventory targets -q                      # names only
-krab inventory targets -l type=terraform       # label selection (also on show/compile)
-krab inventory -t platform.mcps.grafana        # rendered target, same YAML as kapitan
-krab inventory -t platform.mcps.grafana -p parameters.cluster --format json
-krab inventory -l type=terraform -p parameters.gcp_project_id   # one value per target
-krab inventory -t platform.mcps.grafana -F     # flattened dotted keys, easy to grep
-krab inventory classes -t platform.mcps.grafana        # class files a target includes, in order
+krab inventory targets -l env=prod       # label selection (also on show/compile)
+krab inventory -t team.app.prod        # rendered target, same YAML as kapitan
+krab inventory -t team.app.prod -p parameters.cluster --format json
+krab inventory -l env=prod -p parameters.cluster.name   # one value per target
+krab inventory -t team.app.prod -F     # flattened dotted keys, easy to grep
+krab inventory classes -t team.app.prod        # class files a target includes, in order
 krab inventory classes                                  # every class file with how many targets include it
 krab inventory classes --unused                         # dead classes
-krab inventory export --out /tmp/claude/inv --format json   # one file per target
+krab inventory export --out /tmp/inv --format json   # one file per target
 ```
 
 `--json` on any command turns output and diagnostics into JSON.
@@ -62,8 +56,8 @@ krab inventory export --out /tmp/claude/inv --format json   # one file per targe
 ## Explain a value
 
 ```bash
-krab inventory explain -t platform.mcps.grafana cluster.name
-krab inventory explain -t platform.mcps.grafana kapitan.compile[0].name
+krab inventory explain -t team.app.prod cluster.name
+krab inventory explain -t team.app.prod kapitan.compile[0].name
 ```
 
 Shows the value, its type, the file:line:col that wrote it, the `${...}`
@@ -86,8 +80,7 @@ target, the parameter path and source locations.
 
 ## Python resolvers (resolvers.py)
 
-krab runs the repository's `resolvers.py` (grid:
-`system/omegaconf/resolvers/resolvers.py`) in a pool of Python workers, as
+krab runs the repository's `resolvers.py` in a pool of Python workers, as
 the omegaconf backend did, configured in `.kapitan`:
 
 ```yaml
@@ -100,9 +93,8 @@ inventory:
 ```
 
 - `KRAB_PYTHON` is the per-machine override of the shared `python:` key.
-  grid's `/opt/venv/bin/python` does not exist on coder boxes: set
-  `KRAB_PYTHON` (a venv or pixi python that imports omegaconf), or drop
-  the key locally. A missing interpreter is diagnosed up front, naming the
+  Where that interpreter does not exist, set `KRAB_PYTHON` (a venv or pixi
+  python that imports omegaconf), or drop the key locally. A missing interpreter is diagnosed up front, naming the
   key.
 - Keep `prefer-native: true`. With `false`, `json`, `to_yaml`, `pluck` and
   friends run in Python and their `_root_` lookups call Python again; each
@@ -121,7 +113,7 @@ krab compile                    # only targets whose inputs changed
 krab compile --dry-run          # what would compile, and why (which file changed)
 krab compile --explain          # same, while compiling
 krab compile -t a.b -t c.d      # selected targets
-krab compile -l type=terraform
+krab compile -l env=prod
 krab compile --force            # everything, regardless
 krab compile --reveal           # decrypt refs into the output instead of embedding them
 krab compile --backend python   # kapitan's own Python input types in a worker (slow, complete)
@@ -132,7 +124,7 @@ krab refs --reveal -f compiled/prod/manifests/secret.yml   # write, reveal, upda
 ```
 
 Dependencies (git, http(s), helm, oci) are fetched natively before
-staleness is decided. grid has `fetch: true` in `.kapitan`, so a missing
+staleness is decided. With `fetch: true` in `.kapitan`, a missing
 chart directory (`system/sources/charts/<name>/<version>` after a version
 bump) or generator checkout is fetched on the next compile; whatever exists
 is left alone. `--dry-run` shows `would fetch ...`, `--explain` shows
@@ -144,35 +136,31 @@ rendered document digest, every file the inputs read (templates, helm chart
 files, kadet modules and their imports, copied files, refs), the other
 targets read through the global inventory, and the output tree digest.
 Editing a template or a kadet module therefore recompiles exactly its
-readers. A no-op run takes ~0.2 s on grid; a full one ~50 s. The manifest is
-currently untracked in git; do not commit it unless asked.
+readers. Do not commit the manifest unless asked.
 
-Native today: `jinja2`, `kadet` (Python evaluates the component against
-krab's own bundled `kapitan` package in a venv krab builds from
-`compile.python-requirements` in `.kapitan`, under `~/.cache/krab/python/`;
-Rust does the rest), `copy`, `remove`, `external`; output types yaml/json/plain; refs
-(embedding, reveal, creation from functions, `krab refs`); dependency
-fetching (git, http, helm, oci). **Not yet native**: `jsonnet`, `helm` as a
-direct input, `kustomize`, `cuelang`, toml output. For those use
-`--backend python` or the reference `kapitan`.
+`kadet` components run in a venv krab builds from
+`compile.python-requirements` in `.kapitan` (under `~/.cache/krab/python/`),
+against krab's own bundled `kapitan` package; Rust does the rest. The input
+and output types that are not native yet are the open deviations in
+`docs/specs/inputs-and-output.md`. For those use `--backend python` or the
+reference `kapitan`.
 
 ## Parity check (after any engine change)
 
 ```bash
-cd path/to/grid                                     # wherever grid is checked out
+cd path/to/inventory/repo
 krab compile --force && git status --short compiled   # must print nothing
 ```
 
 For the inventory alone: `krab inventory -t X` must match
-`krab inventory -t X` byte for byte. Fixture tests
-(`cargo test --release`) cover the engine without grid, including
+`kapitan inventory -t X` byte for byte. Fixture tests
+(`cargo test --release`) cover the engine without a real inventory, including
 `resolvers.py` through the Python bridge; the corpus test needs
 `KRAB_CORPUS` and `KRAB_COMPILED` (see `docs/DESIGN.md`, Testing).
 
-Reference scripts run with `PEX_INTERPRETER=1 /usr/local/bin/kapitan script.py`
-from `grid`. `inventory/classes/clusters` is a nested git repo: revert test
-edits there with `git -C inventory/classes/clusters checkout -- <file>`.
-Always revert test edits to grid.
+Reference scripts run with the Python kapitan's interpreter (for a PEX:
+`PEX_INTERPRETER=1 kapitan script.py`) from the inventory repository.
+Always revert test edits to the inventory repository.
 
 ## Daemon
 
@@ -186,10 +174,8 @@ krab server run            # foreground, for debugging (exits at once if this bu
 
 Socket `$XDG_RUNTIME_DIR/krab/<inventory>-<build>.sock` (fallback
 `/tmp/krab-<uid>/`), log `~/.local/state/krab/server-<inventory>.log`.
-JSON-RPC 2.0, newline delimited; methods in
-`crates/krab-server/src/protocol.rs` (`server.info`, `inventory.targets`,
-`inventory.target`, `inventory.explain`, `inventory.deps`,
-`inventory.diagnostics`, `inventory.wait` long poll, ...). Use them directly
+JSON-RPC 2.0, newline delimited; the methods are listed in `docs/CLI.md`
+(`krab server`), their shapes in `crates/krab-server/src/protocol.rs`. Use them directly
 from scripts when the CLI shape does not fit. `server.*` answer while the
 initial render runs (`ready: false`); `inventory.*` wait for it.
 
@@ -208,30 +194,30 @@ Troubleshooting:
 `krab lsp` is a language server over the daemon (hover = value + origin +
 overrides across the targets that include the file, go to definition,
 completion of classes and `${` paths, live diagnostics). The VS Code
-extension is `editors/vscode` (installed as `kapicorp.kapitan`). Point
-`kapitan.path` at the same binary the shell uses and set `kapitan.python`
+extension is `editors/vscode` (installed as `kapicorp.krab`). Point
+`krab.path` at the same binary the shell uses and set `krab.python`
 (passed on as `KRAB_PYTHON`) when the inventory has Python resolvers: the
 extension host's `python3` cannot import omegaconf. Smoke test without an
 editor (the scripts run `krab` from `PATH`):
 
 ```bash
-python3 scripts/lsp-smoke.py grid inventory/targets/aws/eu-central-1/cluster.yml 1:10 20:24
-python3 scripts/lsp-smoke-live.py grid    # completion + diagnostics (edits and restores a class)
+python3 scripts/lsp-smoke.py path/to/inventory/repo inventory/targets/team/app/prod.yml 1:10 20:24
+python3 scripts/lsp-smoke-live.py path/to/inventory/repo    # completion + diagnostics (edits and restores a class)
 ```
 
-Server-side problems show in the "Kapitan (grid)" output channel, whose log
+Server-side problems show in the "Kapitan (<repository directory>)" output channel, whose log
 is under `~/.vscode-server/data/logs/*/exthost*/output_logging_*/`.
 
 ## Developing krab
 
 ```bash
-git worktree add /home/coder/krab/<name> -b <branch> origin/main   # one worktree per branch
-cargo build --release -j 4     # target/release/krab; a rebuilt binary uses a fresh socket, nothing to stop
+git worktree add ../krab-<name> -b <branch> origin/main   # one worktree per branch
+cargo build --release          # target/release/krab; a rebuilt binary uses a fresh socket, nothing to stop
 cargo fmt --all && cargo clippy --all-targets --release && cargo test --release
 ```
 
-CI denies warnings, so run clippy before pushing; an unbounded `cargo build`
-was OOM-killed once on a coder box, hence `-j 4`. Commit messages are
+CI denies warnings, so run clippy before pushing; on a machine with little
+memory, limit the build with `-j`. Commit messages are
 `area: what changed` (`inventory: ...`, `server: ...`, `vscode: ...`);
 issues follow the dated-observation-then-bullets shape of the existing ones.
 To release: bump `version` in the workspace `Cargo.toml` (and
@@ -241,9 +227,10 @@ To release: bump `version` in the workspace `Cargo.toml` (and
 Crates: `krab-inventory` (engine: loader, class resolution, OmegaConf
 merge and interpolation, resolvers, the Python resolver bridge, provenance,
 emitters), `krab-server` (daemon + client), `krab-compile` (manifest,
-native inputs, refs, Python runners), `krab-lsp`, `krab` (CLI). Native
-resolvers are Rust functions registered in
-`crates/krab-inventory/src/resolvers/`; the README shows how to add one.
+native inputs, refs, Python runners), `krab-lsp`, `krab` (CLI). Test
+commands and conventions are in `AGENTS.md`; where to add a resolver, an
+input type, an RPC method and the like is the Extending section of
+`docs/ARCHITECTURE.md`.
 `vendor/saphyr-parser` carries two PyYAML-compatibility patches.
 
 Gotchas: build failures leave the old binary in place, so confirm

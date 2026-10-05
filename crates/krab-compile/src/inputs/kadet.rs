@@ -228,3 +228,38 @@ impl KadetPool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::KADET_RUNNER_FILES;
+    use std::path::Path;
+
+    fn python_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                python_files(root, &path, out);
+            } else if path.extension().is_some_and(|e| e == "py") {
+                let rel = path.strip_prefix(root).unwrap();
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+
+    /// A module missing from the list is absent from the evaluator's
+    /// `kapitan` package and fails only in a component that imports it.
+    #[test]
+    fn every_bundled_kapitan_module_is_listed() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("runner");
+        let mut on_disk = Vec::new();
+        python_files(&root, &root.join("kapitan"), &mut on_disk);
+        on_disk.sort();
+        let mut listed: Vec<String> = KADET_RUNNER_FILES
+            .iter()
+            .map(|(path, _)| path.to_string())
+            .filter(|path| path.starts_with("kapitan/"))
+            .collect();
+        listed.sort();
+        assert_eq!(listed, on_disk, "KADET_RUNNER_FILES against runner/kapitan");
+    }
+}

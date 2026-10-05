@@ -13,6 +13,16 @@ use krab_compile::inputs::kadet::KadetPool;
 use krab_compile::python::PythonCmd;
 use serde_json::{Value, json};
 
+/// Report why the test does not run. CI installs what these tests need, so
+/// there a skip is a failure rather than a silent pass.
+fn skip(why: &str) {
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "{why}, and CI must run this test"
+    );
+    eprintln!("{why}; skipping");
+}
+
 fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/kadet")
@@ -31,7 +41,7 @@ fn python_has(modules: &str) -> bool {
 #[test]
 fn evaluates_a_component_without_the_python_kapitan() {
     if !python_has("kadet, jinja2") {
-        eprintln!("python3 with kadet and jinja2 not available; skipping");
+        skip("python3 with kadet and jinja2 not available");
         return;
     }
     let root = fixture();
@@ -144,7 +154,7 @@ fn evaluates_a_component_without_the_python_kapitan() {
 #[test]
 fn undeclared_topic_is_a_compile_error() {
     if !python_has("kadet") {
-        eprintln!("python3 with kadet not available; skipping");
+        skip("python3 with kadet not available");
         return;
     }
     let root = fixture();

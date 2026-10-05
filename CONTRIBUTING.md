@@ -4,11 +4,14 @@
 
 One issue, one branch, one PR.
 
-1. The issue carries the specification. For parity work that means what the
-   reference does, where that behaviour lives in its source, and a reproduction
-   both implementations can be run against. For a krab extension it means what
-   the behaviour should be, since no reference decides it. Open work lives on
-   the board (`docs/ROADMAP.md`).
+1. The issue describes the problem, and the pull request updates the spec in
+   [docs/specs/](docs/specs/README.md) that the change touches: a new or
+   changed requirement with its `Test:` line, or an open deviation removed
+   when a gap closes. For parity work the issue says what the reference does,
+   where that behaviour lives in its source, and gives a reproduction both
+   implementations can be run against. For a krab extension it says what the
+   behaviour should be, since no reference decides it. Open work lives on the
+   board (`docs/ROADMAP.md`).
 2. The fixture case comes first. Add it to `tests/fixtures/inventory` and
    regenerate the expected output with the reference, so the test fails for the
    reason the issue describes before anything is implemented.
@@ -40,12 +43,28 @@ side. A rebuilt binary uses a socket of its own, so there is nothing to stop
 after `cargo build`; the previous daemon idles out (or `krab server stop`
 stops every build's daemon for the inventory).
 
+`tests/fixtures/kadet-output` is a one-target repository to try the binary
+on. Inspecting it works in place; compile a copy, since compiling writes
+`compiled/` next to the inventory:
+
+```sh
+cd tests/fixtures/kadet-output
+krab --no-daemon inventory targets
+krab --no-daemon inventory -t cm
+
+cp -r tests/fixtures/kadet-output /tmp/krab-playground     # from the repository root
+cd /tmp/krab-playground && krab compile --dry-run && krab compile
+```
+
+The compile builds krab's kadet venv on first use, which needs `python3`
+and network access for pip.
+
 ## Tests
 
 * `cargo test --locked` runs the unit tests and the fixture test.
   `tests/fixtures/inventory` is a small inventory exercising class
-  resolution, list merging, merge-time dereferencing, every shipped
-  resolver, YAML 1.1 scalars and PyYAML emitter quirks;
+  resolution, list merging, merge-time dereferencing, most shipped
+  resolvers, YAML 1.1 scalars and PyYAML emitter quirks;
   `tests/fixtures/expected/*.yaml` is what kapitan 0.36.3 prints for it, and
   `crates/krab-inventory/tests/fixture.rs` compares byte for byte. Add a
   case there for every engine behaviour you change or fix, then regenerate
@@ -56,9 +75,20 @@ stops every build's daemon for the inventory).
 * `crates/krab-compile/tests/kadet_runner.rs` evaluates the component in
   `tests/fixtures/kadet` through the kadet evaluator and its bundled
   `kapitan` package (`crates/krab-compile/runner/kapitan`), checking the
-  output and the recorded dependencies. It needs a `python3` with `kadet`
-  and `jinja2` importable and skips otherwise. Extend the fixture when you
-  add to the package's API.
+  output and the recorded dependencies. Extend the fixture when you add to
+  the package's API.
+* The Python resolver tests, the kadet tests and `helm_input.rs` need
+  Python packages and a `helm` v3 binary. CI installs the packages into
+  `python3` with
+
+  ```sh
+  pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
+  ```
+
+  Without them the tests pass without running and say why on stderr, which
+  cargo prints only with `cargo test -- --nocapture`. With the `CI`
+  environment variable set they fail instead; the helm test still skips on
+  macOS, whose CI runner has no helm.
 * `crates/krab/tests/readme_version.rs` checks that the install snippet in
   `README.md` names the version in the manifest, so the `curl` in it cannot
   go stale. It is the only version string in the documentation that has to
@@ -158,8 +188,9 @@ gh attestation verify <the archive you downloaded> --repo kapicorp/krab
   there or in `krab-compile`; the CLI only formats.
 * The daemon and the local path run the same library code. A feature that
   works only with (or only without) the daemon is a bug.
-* Every error is a `Diagnostic` with a code, a message, origins and a `help`
-  text, so it renders the same with miette, as JSON lines and in the editor.
+* Inventory errors are a `Diagnostic` with a code, a message, origins and a
+  `help` text, so they render the same with miette, as JSON lines and in the
+  editor. A new code gets a row in `docs/diagnostics.md`.
 * `vendor/saphyr-parser` is a copy of the crate with two small patches
   (`vendor/README.md`). Keep the diff against upstream minimal.
 * Commit messages: `area: what changed` (`lsp: accept the --stdio flag`).

@@ -13,6 +13,16 @@ use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
 use krab_inventory::resolvers::python::{PythonConfig, PythonResolvers};
 use krab_inventory::{Inventory, InventoryConfig, Node, Registry, Value};
 
+/// Report why the test does not run. CI installs what these tests need, so
+/// there a skip is a failure rather than a silent pass.
+fn skip(why: &str) {
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "{why}, and CI must run this test"
+    );
+    eprintln!("{why}; skipping");
+}
+
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
@@ -113,7 +123,7 @@ fn check_small_fixture(python: &str) {
 #[test]
 fn small_fixture_with_the_installed_omegaconf() {
     if !python_has(&[], "sys") {
-        eprintln!("python3 not available; skipping");
+        skip("python3 not available");
         return;
     }
     check_small_fixture("python3");
@@ -123,7 +133,7 @@ fn small_fixture_with_the_installed_omegaconf() {
 fn small_fixture_with_the_stand_in_omegaconf() {
     // `-S` leaves site-packages out, so the worker's own `omegaconf` is used.
     if !python_has(&["-S"], "sys") || python_has(&["-S"], "omegaconf") {
-        eprintln!("python3 -S not usable for the stand-in test; skipping");
+        skip("python3 -S not usable for the stand-in test");
         return;
     }
     check_small_fixture("python3 -S");
@@ -134,7 +144,7 @@ fn small_fixture_with_the_stand_in_omegaconf() {
 #[test]
 fn fixture_inventory_matches_the_reference_through_python() {
     if !python_has(&[], "yaml") {
-        eprintln!("python3 with PyYAML not available; skipping");
+        skip("python3 with PyYAML not available");
         return;
     }
     let root = fixtures().join("inventory");
@@ -169,7 +179,7 @@ fn fixture_inventory_matches_the_reference_through_python() {
 #[test]
 fn prefer_native_keeps_the_rust_resolver() {
     if !python_has(&[], "sys") {
-        eprintln!("python3 not available; skipping");
+        skip("python3 not available");
         return;
     }
     // `replace` exists natively; the Python file redefines it. Python wins by
@@ -206,7 +216,7 @@ fn prefer_native_keeps_the_rust_resolver() {
 #[test]
 fn nested_python_calls_do_not_deadlock() {
     if !python_has(&[], "sys") {
-        eprintln!("python3 not available; skipping");
+        skip("python3 not available");
         return;
     }
     let dir = std::env::temp_dir().join(format!("krab-nested-{}", std::process::id()));

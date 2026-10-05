@@ -244,7 +244,7 @@ meanwhile. A second starter sees the socket at once and exits.
 
 The protocol is JSON-RPC 2.0, newline delimited: `server.info`,
 `server.shutdown`, `inventory.targets`, `inventory.target`, `inventory.all`,
-`inventory.classes`, `inventory.explain`, `inventory.deps`,
+`inventory.class_usage`, `inventory.classes`, `inventory.explain`, `inventory.deps`,
 `inventory.diagnostics` and `inventory.wait` (a long poll on the generation
 counter). Parameter and result shapes are in
 `crates/krab-server/src/protocol.rs`. After starting a daemon the client
@@ -301,6 +301,8 @@ itself uses:
 | `python-requirements` | `compile` | packages kadet components import; installed into krab's own venv |
 | `refs-path` | `refs` | where `krab refs` looks for ref files |
 | `yaml-multiline-string-style` | `compile` | multiline string style for compiled YAML (default `literal`) |
+| `yaml-use-rapidyaml`, `yaml-dump-null-as-empty` | `compile` | write compiled YAML as kapitan's rapidyaml writer does; write null values as empty (both default `false`) |
+| `python-resolvers` | `inventory` | the `resolvers.py` to run and the Python to run it with ([README](../README.md#python-resolvers)) |
 
 ## JSON output
 
@@ -313,6 +315,7 @@ itself uses:
 * `check --json`, `compile --json`, `watch --json`: one JSON object per
   line. A diagnostic is
   `{severity, code, message, target, path, labels: [{location: {file, line, col}, text}], help}`.
+  The codes are listed in [diagnostics.md](diagnostics.md).
 * `compile --json`: one report with `outcomes` (per target: name, status,
   reason, warnings), `fetched` dependencies (type, source, output path,
   declaring target, status `fetched`/`would_fetch`/`skipped`/`failed`,

@@ -1,5 +1,8 @@
 # Design
 
+This document explains how krab is built and why. What krab must do is
+specified in [specs/](specs/README.md); each section links to its spec.
+
 ## Goals
 
 1. **Compatibility first.** An existing inventory renders byte-identically to
@@ -29,30 +32,18 @@ interpolation is embedded in a string.
 
 ## Loading
 
-`yaml.rs` parses with `saphyr-parser` (events with positions) and applies
-PyYAML `safe_load` scalar rules (YAML 1.1: `yes`/`no`/`on`/`off` are booleans,
-`0755` is octal, `1e5` and `1.5e3` are strings, `1:30` is 90). `<<` merge keys
-and anchors work. Deviations from PyYAML: timestamps stay strings (the
-reference cannot hold `datetime` values anyway); unknown tags are errors.
-
-A class or target file is a `ClassDoc { classes, parameters, applications,
-exports }`; `null` sections are empty, unknown top-level keys are ignored.
+`yaml.rs` parses with `saphyr-parser`, which reports events with positions,
+and applies PyYAML `safe_load` scalar rules on top, so every value keeps its
+source location and still reads the way the reference reads it. A class or
+target file becomes a `ClassDoc { classes, parameters, applications, exports }`.
+The rules are in [specs/inventory.md](specs/inventory.md#loading).
 
 ## Target names
 
-A target is named after its file (`targets/prod/app.yml` is `app`), and
-`compose-target-name` (or the older `compile.compose-node-name`) names it after
-the path instead (`prod.app`). Off by default, as in the reference. The name is
-what `_kapitan_.name.full` / `_reclass_.name.full` report, and what the compiled
-directory follows: `compiled/app/` against `compiled/prod/app/`. `name.path`
-(`prod/app`) and `name.short` (`app`) do not depend on the setting.
-
-`TargetSpec::dotted_path` is the path spelling whether or not it is the name, so
-`-t prod.app` selects the target in both modes.
-
-Two files that end up with one name are an `inventory::conflicting_targets`
-diagnostic naming both. The reference renders nothing at all in that case, and
-says nothing (`docs/DECISIONS.md`, D7).
+Naming, the `compose-target-name` setting and the name conflicts are specified
+in [specs/inventory.md](specs/inventory.md#target-names).
+`TargetSpec::dotted_path` holds the path spelling whether or not it is the
+name, which is what lets `-t prod.app` select a target in both naming modes.
 
 ## Class resolution
 
@@ -64,23 +55,16 @@ For each file the loader builds a `ClassClosure`: its classes' closures merged
 in order, then its own parameters. Merging is associative, so closures are
 memoised per class file and shared between targets. A target is
 `initial_parameters` (kapitan defaults + `_kapitan_`/`_reclass_` metadata)
-merged with its file's closure.
-
-Cycles are detected and reported (the reference recurses forever).
+merged with its file's closure. The resolution rules, cycles included, are in
+[specs/inventory.md](specs/inventory.md#class-resolution).
 
 ## Merge semantics (`merge.rs`)
 
-`OmegaConf.unsafe_merge(dest, src, list_merge_mode=EXTEND_UNIQUE)`:
-
-* map ← map: recurse per key, new keys appended;
-* list ← list: append items of `src` not already in `dest` (Python `==`);
-* `${…}` string ← container: the placeholder is evaluated against the tree
-  merged so far. If it yields a container, that container is copied in and
-  `src` merged into the copy. Otherwise `src` replaces the string;
-* anything else: `src` replaces `dest`.
-
-Every override, list append and dereference is recorded as a `MergeEvent`
-with both origins (opt-out with `track_provenance = false`).
+`merge.rs` reproduces `OmegaConf.unsafe_merge(dest, src,
+list_merge_mode=EXTEND_UNIQUE)`; the rules are in
+[specs/inventory.md](specs/inventory.md#merge-semantics). Every override, list
+append and dereference is recorded as a `MergeEvent` with both origins, which
+is what `explain` reports.
 
 ## Interpolation (`interp/`)
 
@@ -98,7 +82,8 @@ returns a string with `${` (e.g. `default`, `relpath`, `oc.dict.values`) is
 evaluated on the next pass, exactly as in the reference. Cycles and references
 to an enclosing container are errors with the full chain of locations.
 
-After the passes, `${escape:x}` markers become literal `${x}`.
+After the passes, `${escape:x}` markers become literal `${x}`. The behaviour is
+specified in [specs/interpolation.md](specs/interpolation.md).
 
 ## Resolvers (`resolvers/`)
 
@@ -155,7 +140,7 @@ resolved earlier in the render keep what they saw, as in the reference.
 The reference validates `parameters.kapitan` with pydantic models, which fills
 defaults into every `compile` and `dependencies` entry, orders fields, forces
 helm's `output_type` to `auto`, and rejects unknown fields. `normalize()` does
-the same; `--raw` skips it.
+the same; `--raw` skips it ([specs/inventory.md](specs/inventory.md#kapitan-model)).
 
 ## Output (`emit/yaml.rs`)
 
@@ -163,18 +148,21 @@ A port of PyYAML's emitter for the value model: `analyze_scalar`, style
 selection (plain / single / double quoted), 80-column folding of plain and
 quoted scalars, ASCII-only output, sorted keys, and both indentation styles
 (kapitan's `PrettyDumper` and the stock indentless sequences used by the
-`yaml`/`to_yaml` resolvers).
+`yaml`/`to_yaml` resolvers). The emission rules are in
+[specs/inputs-and-output.md](specs/inputs-and-output.md#yaml-emission).
 
 ## Diagnostics
 
 Every error is a `Diagnostic { code, message, target, path, labels, help }`.
 Labels carry origins that resolve to `file:line:col`. The CLI renders them with
-miette (source snippets) or as JSON lines (`--json`).
+miette (source snippets) or as JSON lines (`--json`); the JSON shape is in
+[specs/cli-and-release.md](specs/cli-and-release.md#diagnostic-object).
 
 ## Server (`krab-server`)
 
-One daemon per inventory directory, started on demand by the CLI (or with
-`krab server start`), exiting after 30 minutes without requests.
+One daemon per inventory directory and build, started on demand by the CLI (or
+with `krab server start`). Its behaviour is specified in
+[specs/daemon.md](specs/daemon.md); this section explains how it is organised.
 
 * **State**: the `Inventory` (with its file and class-closure caches), the
   rendered targets, the failed targets with their diagnostics, and an index
@@ -187,12 +175,10 @@ One daemon per inventory directory, started on demand by the CLI (or with
   indexed targets (prefix match for directories and vanished paths), retries
   every failed target, and picks up new or deleted target files. Atomic
   editor saves (write temp + rename) therefore cost one target render.
-* **Protocol**: JSON-RPC 2.0, newline delimited, over
-  `$XDG_RUNTIME_DIR/krab/<hash of inventory path>-<hash of build>.sock`
-  (see `protocol.rs` for the method list). `inventory.wait` is a long poll on
-  the generation counter; `krab inventory watch` is a thin client of it.
-  The socket is bound before the initial render; `inventory.*` requests wait
-  for the render, `server.*` ones answer at once (`ready: false`).
+* **Protocol**: JSON-RPC 2.0, newline delimited, over a Unix socket per
+  inventory and build (`protocol.rs` has the method list). `inventory.wait` is
+  a long poll on the generation counter; `krab inventory watch` is a thin
+  client of it.
 * **Parity**: the CLI uses the server when it can and renders locally
   otherwise (`--no-daemon`, `--raw`, or a server that failed to start); the
   same library code runs in both, so results are identical. Each build owns
@@ -203,7 +189,7 @@ One daemon per inventory directory, started on demand by the CLI (or with
 
 ## Language server (`krab-lsp`)
 
-A thin translator from LSP to the daemon's JSON-RPC, so the editor never
+Specified in [specs/lsp.md](specs/lsp.md). It is a thin translator from LSP to the daemon's JSON-RPC, so the editor never
 renders anything itself:
 
 * `yaml_index.rs` maps a cursor position to a key path, a scalar (with the
@@ -221,6 +207,9 @@ renders anything itself:
   clearing files that became clean.
 
 ## Compile (`krab-compile`)
+
+Specified in [specs/compile.md](specs/compile.md) and
+[specs/inputs-and-output.md](specs/inputs-and-output.md).
 
 Principle: *exact invalidation or nothing*. A target is recompiled when, and
 only when, one of these changed since its last compile:
@@ -300,22 +289,14 @@ directories that belong to no target.
   Multiline strings are literal blocks unless the target's
   `parameters.multiline_string_style` or `compile.yaml-multiline-string-style`
   says otherwise.
-* References (`refs/`): a port of `kapitan/refs`. `RefController` loads ref
-  files (cached), compiles tags (`?{type:path:hash}`, embedded payloads,
-  `plain` inlined, `env` always hashed), creates missing refs from their
-  functions (`random`, `sha256`, `rsa`, `ed25519`, `publickey`, `reveal`,
-  `basicauth`, `base64`) with the target's `parameters.kapitan.secrets`, and
-  reveals them. Mappings are compiled in passes so a `||reveal:` tag can
-  depend on a sibling key's ref, as in kapitan. Backends: `plain`, `base64`,
-  `env` in process; `gkms` over the Cloud KMS REST API with
-  application-default credentials (`authorized_user` refresh, service
-  account JWT, metadata server, `gcloud` fallback); `gpg` through the `gpg`
-  binary with python-gnupg's flags; Vault KV/transit over the HTTP API with
-  token/approle/userpass/ldap/github auth; `awskms`/`azkms` through their
-  CLIs. Ref files are written with `yaml.safe_dump`'s layout so kapitan and
-  krab can read each other's. kapitan's `mock` key is honoured for tests.
+* References (`refs/`): a port of `kapitan/refs`, specified in
+  [specs/refs.md](specs/refs.md). `plain`, `base64` and `env` run in
+  process; `gkms` and Vault go over their HTTP APIs; `gpg`, `awskms` and
+  `azkms` drive their command line tools.
 
 ### Dependency fetching (`krab-compile/src/fetch.rs`)
+
+Specified in [specs/fetch.md](specs/fetch.md).
 
 `parameters.kapitan.dependencies` is fetched before staleness is decided,
 so the files it produces are ordinary inputs: the inputs that read them
@@ -356,13 +337,14 @@ A dependency whose output path already exists is not fetched, and
 `force_fetch: true` on an item forces that item even under `--fetch`
 (D4 and D5 in [DECISIONS.md](DECISIONS.md)).
 
-Known limits: `jsonnet`, `helm`, `kustomize`, `cuelang` inputs, `toml`
-output. `--backend python` runs kapitan's Python input types instead.
+Input and output types that are not native yet are listed under open
+deviations in [specs/inputs-and-output.md](specs/inputs-and-output.md#open-deviations);
+`--backend python` runs kapitan's Python input types instead.
 
 ## Testing
 
 `tests/fixtures/inventory` is a small inventory exercising class resolution,
-list merging, merge-time dereferencing, every shipped resolver, YAML 1.1
+list merging, merge-time dereferencing, most shipped resolvers, YAML 1.1
 scalars and emitter quirks; `tests/fixtures/expected/*.yaml` is the reference
 implementation's output for it (regenerate with `generate_expected.py`).
 `crates/krab-inventory/tests/fixture.rs` renders it and compares byte for

@@ -20,11 +20,10 @@ output, byte for byte:
 
 Status: alpha. In place and verified against a production inventory: the
 inventory (including a repository's Python `resolvers.py`), the daemon, the
-language server, the native compile path for `jinja2`, `kadet`, `copy`,
-`remove` and `external` inputs, references (`?{gkms:...}` and friends:
-compile, create, reveal, `krab refs`), and dependency fetching (`git`,
-`http(s)`, `helm`, `oci`). Not native yet: `jsonnet`, `kustomize`,
-`cuelang` and `toml` output; see
+language server, the native compile path for `jinja2`, `kadet`, `helm`,
+`copy`, `remove` and `external` inputs, references (`?{gkms:...}` and
+friends: compile, create, reveal, `krab refs`), and dependency fetching
+(`git`, `http(s)`, `helm`, `oci`). What is not native yet is listed under
 [Compatibility](#compatibility).
 
 ## Install
@@ -203,11 +202,13 @@ Rendering and compiled output are verified byte for byte against kapitan
 `tests/fixtures` and on a 160-target production inventory.
 
 Where krab behaves differently on purpose, the difference and its reason are
-in [docs/DECISIONS.md](docs/DECISIONS.md). Not implemented yet: `jsonnet`,
-`helm` (as a direct input type; charts rendered by kgenlib inside kadet
-work), `kustomize` and `cuelang` inputs, `toml` output, and Python-defined
-jinja2 filters other than the common ones.
-[docs/DESIGN.md](docs/DESIGN.md) lists the semantics in detail.
+in [docs/DECISIONS.md](docs/DECISIONS.md). The input and output types that
+are not native yet are the
+[open deviations of the inputs spec](docs/specs/inputs-and-output.md#open-deviations),
+and its OUT-8 lists the jinja2 filters krab implements.
+[docs/specs/](docs/specs/README.md) specifies the behaviour and lists the
+known gaps;
+[docs/DESIGN.md](docs/DESIGN.md) explains how it is built.
 
 ## Writing a resolver
 
