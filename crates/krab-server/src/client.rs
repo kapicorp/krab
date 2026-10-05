@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -142,15 +142,24 @@ impl Connector {
         if let Some(c) = self.connect_existing() {
             return Ok(c);
         }
-        self.spawn()?;
+        let mut child = self.spawn()?;
         let socket = self.socket();
-        if !wait_until(
-            || crate::rpc::socket_alive(&socket),
+        // Stop waiting once the child has exited; try_wait also reaps it.
+        wait_until(
+            || crate::rpc::socket_alive(&socket) || matches!(child.try_wait(), Ok(Some(_))),
             Duration::from_secs(10),
-        ) {
+        );
+        let exited = child.try_wait().ok().flatten();
+        if exited.is_none() {
+            // Reap the daemon when it exits while this process still runs
+            // (`krab lsp`); if this process exits first, init inherits it.
+            std::thread::spawn(move || child.wait());
+        }
+        if !crate::rpc::socket_alive(&socket) {
             let log = paths::log_path(&self.inventory_root);
+            let status = exited.map(|s| format!(" ({s})")).unwrap_or_default();
             return Err(ClientError::Protocol(format!(
-                "server did not start; see {}{}",
+                "server did not start{status}; see {}{}",
                 log.display(),
                 log_tail(&log, 5)
             )));
@@ -173,7 +182,7 @@ impl Connector {
     }
 
     /// Start a detached server process (its own session, stdio to the log file).
-    pub fn spawn(&self) -> std::io::Result<()> {
+    pub fn spawn(&self) -> std::io::Result<Child> {
         let log = paths::log_path(&self.inventory_root);
         if let Some(parent) = log.parent() {
             std::fs::create_dir_all(parent)?;
@@ -203,8 +212,7 @@ impl Connector {
                 Ok(())
             });
         }
-        cmd.spawn()?;
-        Ok(())
+        cmd.spawn()
     }
 }
 
