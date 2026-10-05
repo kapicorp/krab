@@ -204,10 +204,10 @@ Rendering and compiled output are verified byte for byte against kapitan
 
 Where krab behaves differently on purpose, the difference and its reason are
 in [docs/DECISIONS.md](docs/DECISIONS.md). Not implemented yet: `jsonnet`,
-`helm` (as a direct input type; charts rendered by kgenlib inside kadet
-work), `kustomize` and `cuelang` inputs, `toml` output, and Python-defined
-jinja2 filters other than the common ones.
-[docs/DESIGN.md](docs/DESIGN.md) lists the semantics in detail.
+`kustomize` and `cuelang` inputs, `toml` output, and Python-defined jinja2
+filters other than the common ones. [docs/specs/](docs/specs/README.md)
+specifies the behaviour and lists the known gaps;
+[docs/DESIGN.md](docs/DESIGN.md) explains how it is built.
 
 ## Writing a resolver
 

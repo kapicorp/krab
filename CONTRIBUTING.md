@@ -4,11 +4,14 @@
 
 One issue, one branch, one PR.
 
-1. The issue carries the specification. For parity work that means what the
-   reference does, where that behaviour lives in its source, and a reproduction
-   both implementations can be run against. For a krab extension it means what
-   the behaviour should be, since no reference decides it. Open work lives on
-   the board (`docs/ROADMAP.md`).
+1. The issue describes the problem, and the pull request updates the spec in
+   [docs/specs/](docs/specs/README.md) that the change touches: a new or
+   changed requirement with its `Test:` line, or an open deviation removed
+   when a gap closes. For parity work the issue says what the reference does,
+   where that behaviour lives in its source, and gives a reproduction both
+   implementations can be run against. For a krab extension it says what the
+   behaviour should be, since no reference decides it. Open work lives on the
+   board (`docs/ROADMAP.md`).
 2. The fixture case comes first. Add it to `tests/fixtures/inventory` and
    regenerate the expected output with the reference, so the test fails for the
    reason the issue describes before anything is implemented.
