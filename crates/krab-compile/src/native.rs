@@ -167,6 +167,7 @@ impl NativeCompiler {
                         items,
                         &mut records,
                         &mut evaluator,
+                        &mut warnings,
                     )
                 });
             if let Err(e) = result {
@@ -198,6 +199,7 @@ impl NativeCompiler {
         ctx: &ItemContext,
         records: &mut ItemRecords,
         evaluator: &mut Option<Worker>,
+        warnings: &mut Vec<String>,
     ) -> Result<(), String> {
         let output_type = OutputType::parse(&item.output_type)
             .ok_or_else(|| format!("unknown output_type `{}`", item.output_type))?;
@@ -232,6 +234,14 @@ impl NativeCompiler {
                             let mut outputs = BTreeMap::new();
                             if let Json::Object(files) = output {
                                 for (key, value) in files {
+                                    if value.is_string() && output_type != OutputType::Plain {
+                                        warnings.push(format!(
+                                            "kadet output `{}` is a string and is written as one \
+                                             {} scalar; did you mean `output_type: plain`?",
+                                            Path::new(&item.output_path).join(&key).display(),
+                                            item.output_type
+                                        ));
+                                    }
                                     let path = writer.to_file(
                                         output_type,
                                         OutputType::Yaml,

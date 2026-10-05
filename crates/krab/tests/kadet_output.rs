@@ -77,3 +77,49 @@ fn the_folded_style_keeps_line_breaks() {
     let dot_kapitan = "global:\n  inventory-backend: omegaconf\ncompile:\n  yaml-multiline-string-style: folded\n";
     assert_eq!(compile("folded", dot_kapitan), expected("folded"));
 }
+
+/// A kadet file whose value is a string, under a YAML or JSON output type,
+/// is still written as one scalar and warns, suggesting `output_type: plain`
+/// (#126). A mapping does not warn.
+#[test]
+fn a_string_file_under_yaml_or_json_warns() {
+    let dir = std::env::temp_dir().join(format!("krab-kadet-string-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("components/text")).unwrap();
+    std::fs::create_dir_all(dir.join("inventory/targets")).unwrap();
+    std::fs::write(
+        dir.join(".kapitan"),
+        "global:\n  inventory-backend: omegaconf\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("components/text/__init__.py"),
+        "from kapitan.inputs.kadet import BaseObj\n\n\ndef main(input_params):\n    obj = BaseObj()\n    obj.root.Dockerfile = \"FROM x\\n\"\n    if input_params.get(\"cm\"):\n        obj.root.cm = {\"a\": 1}\n    return obj\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("inventory/targets/t.yml"),
+        "parameters:\n  kapitan:\n    vars:\n      target: t\n    compile:\n      - input_type: kadet\n        input_paths: [components/text]\n        output_path: y\n        input_params: {cm: true}\n      - input_type: kadet\n        input_paths: [components/text]\n        output_path: j\n        output_type: json\n        input_params: {cm: true}\n      - input_type: kadet\n        input_paths: [components/text]\n        output_path: p\n        output_type: plain\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_krab"))
+        .args(["--no-daemon", "compile"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(out.status.success(), "{stderr}");
+    let read = |p: &str| std::fs::read_to_string(dir.join("compiled/t").join(p)).unwrap();
+    assert_eq!(read("y/Dockerfile.yaml"), "|\n  FROM x\n");
+    assert_eq!(read("j/Dockerfile.json"), "\"FROM x\\n\"");
+    assert_eq!(read("p/Dockerfile"), "FROM x\n");
+    let warnings: Vec<&str> = stderr.lines().filter(|l| l.contains("warning:")).collect();
+    assert_eq!(warnings.len(), 2, "{stderr}");
+    assert!(
+        warnings
+            .iter()
+            .all(|w| w.contains("Dockerfile") && w.contains("output_type: plain")),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
