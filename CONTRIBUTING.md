@@ -127,9 +127,10 @@ git push origin "v$version"
 ```
 
 `.github/workflows/release.yml` refuses a tag that does not match the
-workspace version, builds `krab` for Linux x86_64 and aarch64 (each on its
-own Ubuntu 22.04 runner, so glibc 2.35 or newer) and for macOS Intel and
-Apple silicon, packages the extension, and creates the GitHub release with
+workspace version, builds `krab` for Linux x86_64 and aarch64 (with
+`cargo zigbuild` against glibc 2.17, failing if the binary needs a newer
+glibc symbol) and for macOS Intel and Apple silicon, packages the
+extension, and creates the GitHub release with
 the four `krab-<version>-<target>.tar.gz` archives, the `.vsix` and a
 `SHA256SUMS` file. A tag with a pre-release suffix (`-alpha.1`) becomes a
 pre-release. If the release already exists (created from the GitHub UI, for

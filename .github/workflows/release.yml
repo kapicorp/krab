@@ -1,7 +1,7 @@
 # Builds the release artifacts and attaches them to the GitHub release.
 #
 # Pushing a tag `vX.Y.Z` (matching the workspace version in Cargo.toml)
-# builds the `krab` binary for Linux (x86_64, aarch64; glibc 2.35+) and
+# builds the `krab` binary for Linux (x86_64, aarch64; glibc 2.17+) and
 # macOS (Intel, Apple silicon), packages the VS Code extension, and creates
 # the release with notes from the commit log, or uploads to it if it exists.
 # Tags with a pre-release suffix (`v2.0.0-alpha.1`) are marked pre-release.
@@ -58,10 +58,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # glibc: the oldest glibc the binary may need. cargo-zigbuild links
+          # against that version's symbols whatever the runner has.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
+            glibc: "2.17"
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04-arm
+            glibc: "2.17"
           - target: x86_64-apple-darwin
             os: macos-latest
           - target: aarch64-apple-darwin
@@ -74,7 +78,33 @@ jobs:
         run: |
           rustup show active-toolchain
           rustup target add ${{ matrix.target }}
-      - run: cargo build --release --locked -p krab --target ${{ matrix.target }}
+      - if: ${{ !matrix.glibc }}
+        run: cargo build --release --locked -p krab --target ${{ matrix.target }}
+      - if: ${{ matrix.glibc }}
+        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908 # v2.87.15
+        with:
+          tool: cargo-zigbuild@0.23.4
+      # cargo-zigbuild runs zig through `python3 -m ziglang` when no `zig` is
+      # on PATH; the ziglang wheel is the Zig project's own build.
+      - if: ${{ matrix.glibc }}
+        run: python3 -m pip install ziglang==0.16.0
+      - if: ${{ matrix.glibc }}
+        env:
+          TARGET: ${{ matrix.target }}
+          GLIBC: ${{ matrix.glibc }}
+        run: cargo zigbuild --release --locked -p krab --target "$TARGET.$GLIBC"
+      - name: Needs at most glibc ${{ matrix.glibc }}
+        if: ${{ matrix.glibc }}
+        env:
+          TARGET: ${{ matrix.target }}
+          GLIBC: ${{ matrix.glibc }}
+        run: |
+          highest=$(objdump -T "target/$TARGET/release/krab" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "highest glibc symbol version: $highest"
+          if [ -z "$highest" ] || [ "$(printf '%s\n' "$highest" "GLIBC_$GLIBC" | sort -V | tail -1)" != "GLIBC_$GLIBC" ]; then
+            echo "::error::krab needs $highest, above the glibc $GLIBC floor"
+            exit 1
+          fi
       - name: Package
         env:
           VERSION: ${{ needs.version.outputs.version }}
