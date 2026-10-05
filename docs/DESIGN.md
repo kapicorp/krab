@@ -257,8 +257,9 @@ cluster target in 0.14 s instead of 10 s. `--force` disables reuse.
 
 Execution: stale targets are compiled on a thread pool (one per CPU), each
 into a private temporary tree that then replaces `compiled/<target path>`
-while leaving nested targets' directories alone. Full runs remove output
-directories that belong to no target.
+while leaving nested targets' directories alone; an item whose
+`output_path` leaves that directory fails the target (D14). Full runs remove
+output directories that belong to no target.
 
 ### Native input types (`krab-compile/src/inputs`, `output.rs`, `refs/`)
 

@@ -589,6 +589,18 @@ fn run_one(
     manifest: &Mutex<Manifest>,
 ) -> Outcome {
     let started = Instant::now();
+    if let Some(error) = plan.output_outside_target() {
+        return Outcome {
+            target: plan.name.clone(),
+            status: Status::Failed {
+                error,
+                traceback: None,
+            },
+            reason,
+            warnings: vec![],
+            reused_items: 0,
+        };
+    }
     if let Some(native) = ctx.native {
         let temp_dir = ctx.temp_root.join(&plan.name);
         let _ = std::fs::remove_dir_all(&temp_dir);

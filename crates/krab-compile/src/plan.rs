@@ -6,6 +6,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::digest::digest_str;
+use crate::fetch::normalise_join;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct TargetPlan {
@@ -84,6 +85,24 @@ impl TargetPlan {
             labels,
             probes,
         }
+    }
+
+    /// An error for the first compile item whose `output_path` leaves
+    /// `compiled/<target path>`: only that directory is installed (D14).
+    pub fn output_outside_target(&self) -> Option<String> {
+        self.compile.iter().find_map(|item| {
+            let out = item
+                .get("output_path")
+                .and_then(Value::as_str)
+                .unwrap_or(".");
+            (!normalise_join(Path::new(&self.target_path), out).starts_with(&self.target_path))
+                .then(|| {
+                    format!(
+                        "output_path `{out}` resolves outside compiled/{}; a target writes only into its own directory",
+                        self.target_path
+                    )
+                })
+        })
     }
 
     pub fn matches_labels(&self, wanted: &[(String, String)]) -> bool {
