@@ -80,16 +80,24 @@ fn truncate(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("truncate", args, 2, 2)?;
     let value = as_str("truncate", args, 0)?;
     let length = as_int("truncate", args, 1)?;
+    if length < 5 {
+        return Err(format!(
+            "length {length} is below 5: the Python helper keeps `value[: length - 5]`, which \
+             returns a value longer than `length` here; a `truncate` in resolvers.py with \
+             `prefer-native: false` (the default) keeps the Python behaviour"
+        )
+        .into());
+    }
     let chars: Vec<char> = value.chars().collect();
     if chars.len() as i64 <= length {
         return Ok(Value::Str(value.to_string()));
     }
     let digest = <Md5 as md5::Digest>::digest(value.as_bytes());
     let hash = format!("{:02x}{:02x}", digest[0], digest[1]);
-    let keep = (length - 5).max(0) as usize;
+    let keep = (length - 5) as usize;
     Ok(Value::Str(format!(
         "{}-{}",
-        chars[..keep.min(chars.len())].iter().collect::<String>(),
+        chars[..keep].iter().collect::<String>(),
         &hash[..4]
     )))
 }
@@ -273,4 +281,31 @@ fn join(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 
 fn join_quoted(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     join_with(ctx, "join_quoted", args, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::interp::eval::Evaluator;
+    use crate::resolvers::Registry;
+    use crate::source::{SourceId, Sources};
+    use crate::yaml::parse_document;
+
+    fn render(expr: &str) -> crate::error::Result<String> {
+        let mut root = parse_document(&format!("v: '{expr}'\n"), SourceId::SYNTHETIC)?;
+        let registry = Registry::with_builtins();
+        Evaluator::new(&mut root, &registry, &Sources::new(), "t", false).resolve_all(1)?;
+        Ok(root.get("v").and_then(|n| n.as_str()).unwrap().to_string())
+    }
+
+    /// The Python original keeps `value[: length - 5]`, which for a length
+    /// below 5 counts from the end and returns more than `length` characters.
+    #[test]
+    fn truncate_refuses_a_length_below_5() {
+        let e = render("${truncate:abcdef,3}").unwrap_err();
+        let msg = &e.diagnostic().message;
+        assert!(msg.contains("longer than `length`"), "{msg}");
+        assert!(msg.contains("prefer-native: false"), "{msg}");
+        assert_eq!(render("${truncate:abcdef,5}").unwrap(), "-e80b");
+        assert_eq!(render("${truncate:abcdefghij,8}").unwrap(), "abc-a925");
+    }
 }
