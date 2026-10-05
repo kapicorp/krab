@@ -478,6 +478,8 @@ impl Emitter {
         {
             return if block == M::Literal {
                 Style::Literal
+            } else if self.folds_a_spaced_line(&s.text) {
+                Style::Double
             } else {
                 Style::Folded
             };
@@ -486,6 +488,24 @@ impl Emitter {
             return Style::Single;
         }
         Style::Double
+    }
+
+    /// Whether `write_block` would fold a line that starts with a space. YAML
+    /// keeps such lines verbatim, so the fold would read back as a line break
+    /// and the value would change (#218).
+    fn folds_a_spaced_line(&self, text: &str) -> bool {
+        let indent = self.indent.unwrap_or(0);
+        text.split(is_break)
+            .filter(|line| line.starts_with(' '))
+            .any(|line| {
+                let chars: Vec<char> = line.chars().collect();
+                (0..chars.len()).any(|i| {
+                    chars[i] == ' '
+                        && (i == 0 || chars[i - 1] != ' ')
+                        && chars.get(i + 1) != Some(&' ')
+                        && indent + i > self.opts.width
+                })
+            })
     }
 
     /// PyYAML `write_literal` / `write_folded`. Folded writes an extra break
@@ -1151,24 +1171,66 @@ mod tests {
         );
     }
 
-    /// PyYAML folds a long line that starts with a space too, so the value
-    /// reads back changed. krab writes the same bytes as the reference.
+    /// PyYAML folds a long line that starts with a space too, and the value
+    /// reads back changed (#218). krab writes such a value double-quoted.
     #[test]
-    fn folded_long_line_starting_with_a_space_matches_pyyaml() {
-        let mut m = crate::value::Map::new();
+    fn folded_long_line_starting_with_a_space_falls_back_to_double_quotes() {
         let text = format!(" {}w\nz\n", "w ".repeat(49));
-        m.insert("k".into(), Node::synthetic(Value::Str(text)));
+        let mut m = crate::value::Map::new();
+        m.insert("k".into(), Node::synthetic(Value::Str(text.clone())));
         let opts = DumpOptions {
             multiline: Some(super::super::ryml::MultilineStyle::Folded),
             ..DumpOptions::default()
         };
-        assert_eq!(
-            dump_yaml(&Node::synthetic(Value::Map(m)), &opts),
-            format!(
-                "k: >2\n   {}w\n  {}w\n  z\n",
-                "w ".repeat(39),
-                "w ".repeat(9)
-            )
-        );
+        let out = dump_yaml(&Node::synthetic(Value::Map(m)), &opts);
+        assert!(out.starts_with("k: \" "), "{out}");
+        let back = parse_document(&out, SourceId(0)).unwrap();
+        assert_eq!(back.as_map().unwrap()["k"].as_str(), Some(text.as_str()));
+    }
+
+    /// Whatever the folded style writes reads back as the same string, at
+    /// any nesting depth.
+    #[test]
+    fn folded_output_reads_back_unchanged() {
+        let opts = DumpOptions {
+            multiline: Some(super::super::ryml::MultilineStyle::Folded),
+            ..DumpOptions::default()
+        };
+        let mut texts = Vec::new();
+        for lead in ["", " ", "  "] {
+            for words in [30, 38, 39, 40, 41, 49, 60] {
+                let line = format!("{lead}{}w", "w ".repeat(words));
+                texts.push(format!("{line}\nz\n"));
+                texts.push(format!("a\n{line}\nz\n"));
+                texts.push(format!("a\n\n{line}\n\nz"));
+                texts.push(format!("{line}\n{line}\n"));
+            }
+        }
+        for text in texts {
+            let mut inner = crate::value::Map::new();
+            inner.insert("k".into(), Node::synthetic(Value::Str(text.clone())));
+            let mut root = crate::value::Map::new();
+            root.insert("k".into(), Node::synthetic(Value::Str(text.clone())));
+            root.insert("m".into(), Node::synthetic(Value::Map(inner)));
+            root.insert(
+                "s".into(),
+                Node::synthetic(Value::List(vec![Node::synthetic(Value::Str(text.clone()))])),
+            );
+            let out = dump_yaml(&Node::synthetic(Value::Map(root)), &opts);
+            let back = parse_document(&out, SourceId(0)).unwrap();
+            let back = back.as_map().unwrap();
+            let want = Some(text.as_str());
+            assert_eq!(back["k"].as_str(), want, "{text:?} -> {out}");
+            assert_eq!(
+                back["m"].as_map().unwrap()["k"].as_str(),
+                want,
+                "{text:?} -> {out}"
+            );
+            assert_eq!(
+                back["s"].as_list().unwrap()[0].as_str(),
+                want,
+                "{text:?} -> {out}"
+            );
+        }
     }
 }
