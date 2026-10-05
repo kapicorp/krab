@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use krab_inventory::dotkapitan::DotKapitan;
 use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
-use krab_inventory::error::Diagnostic;
+use krab_inventory::error::{Diagnostic, Label};
 use krab_inventory::resolvers::python::{PythonConfig, PythonResolvers};
+use krab_inventory::source::{Location, Origin};
 use krab_inventory::{Inventory, InventoryConfig, Map, Node, Registry, Value};
 use krab_server::protocol::AllResult;
 use krab_server::{Client, ClientError, Connector};
@@ -102,14 +103,31 @@ impl App {
                 }
                 tracing::info!(file = %python.file.display(), python = %python.python.description, "Python resolvers configured");
                 let resolvers = PythonResolvers::new(python);
-                PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
-                    Failure::Diagnostics(
-                        vec![Diagnostic::error("inventory::python_resolvers", e).with_help(
-                            "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
-                        )],
-                        json,
-                    )
-                })?;
+                // Like kapitan, a file that does not import leaves the
+                // built-in resolvers working; a target fails only where it
+                // calls one of the file's names.
+                if let Err(e) = PythonResolvers::install(&resolvers, &mut registry) {
+                    let file = resolvers.cfg.file.clone();
+                    registry.set_description(format!(
+                        "{} failed to import, so none of its resolvers exist (inventory::python_resolvers)",
+                        file.display()
+                    ));
+                    let mut d = Diagnostic::warning("inventory::python_resolvers", e).with_help(
+                        "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
+                    );
+                    d.labels.push(Label {
+                        origin: Origin::SYNTHETIC,
+                        location: Some(Location {
+                            file: file.clone(),
+                            line: 1,
+                            col: 1,
+                        }),
+                        text: "this file".into(),
+                    });
+                    registry.add_diagnostic(d);
+                    // A fix to the file must restart the daemon.
+                    registry.add_source(file);
+                }
             }
             None if dot.python_resolvers.enabled == Some(false) => {
                 registry.set_description("Python resolvers disabled in .kapitan");

@@ -61,6 +61,9 @@ pub struct Registry {
     /// Where the non-native resolvers came from, for diagnostics
     /// (`12 Python resolvers from resolvers.py via python3`).
     description: String,
+    /// Problems building the registry that do not stop rendering (a
+    /// `resolvers.py` that failed to import), reported once per inventory.
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl Registry {
@@ -123,6 +126,14 @@ impl Registry {
 
     pub fn description(&self) -> &str {
         &self.description
+    }
+
+    pub fn add_diagnostic(&mut self, d: Diagnostic) {
+        self.diagnostics.push(d);
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 }
 

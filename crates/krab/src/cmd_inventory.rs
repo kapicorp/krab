@@ -484,6 +484,9 @@ fn check(app: &App) -> Result<(), Failure> {
         None => {
             let report = app.inv.render_all().map_err(|e| app.fail(vec![e]))?;
             let ok = report.targets.len();
+            for d in app.inv.registry.diagnostics() {
+                report::print_diagnostic(d, app.json);
+            }
             for t in report.targets.values() {
                 app.warn_all(&t.warnings);
             }

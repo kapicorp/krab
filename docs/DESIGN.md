@@ -143,6 +143,10 @@ native `contrib` set is a port of one such file and cannot follow its edits.
 For the same reason `contrib` holds general purpose helpers only; anything
 that encodes one repository's data shape or a cloud's naming belongs in that
 repository's `resolvers.py`.
+A file that does not import (a syntax error, a missing module, no
+`pass_resolvers()`) is reported once as `inventory::python_resolvers` with the
+exception, in `inventory check` and the editor; the other resolvers keep
+working and a target fails only where it calls one of the file's names.
 The registry records the files it depends on, `.kapitan` among them; the
 daemon exits when one changes and the next request starts a fresh one.
 

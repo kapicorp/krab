@@ -295,14 +295,18 @@ impl Server {
             }
             "inventory.diagnostics" => {
                 let inner = self.state.read();
-                let warnings = inner
-                    .targets
-                    .values()
-                    .flat_map(|t| {
+                let warnings = self
+                    .state
+                    .inv
+                    .registry
+                    .diagnostics()
+                    .iter()
+                    .cloned()
+                    .chain(inner.targets.values().flat_map(|t| {
                         t.warnings
                             .iter()
                             .map(|w| w.clone().resolve(&self.state.inv.sources))
-                    })
+                    }))
                     .collect();
                 Ok(serde_json::to_value(DiagnosticsResult {
                     generation: inner.generation,
