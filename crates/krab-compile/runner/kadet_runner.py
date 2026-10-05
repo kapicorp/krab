@@ -160,9 +160,6 @@ class Recorder:
         self.root = os.path.realpath(root) + os.sep
         self.active = False
         self.target = None
-        self.reset()
-
-    def reset(self):
         self.files, self.dirs, self.globals, self.doc_reads = set(), set(), set(), set()
 
     def _real(self, path):
@@ -327,7 +324,9 @@ def op_eval(req):
     input_path = req["input_path"]
     input_params = dict(req.get("input_params") or {})
     input_params.setdefault("compile_path", req["compile_path"])
-    RECORDER.reset()
+    # No reset: the evaluator belongs to one target, and a module an earlier
+    # item imported is not imported again, so its reads count for every
+    # later item too (#184).
     RECORDER.active = True
     RECORDER.target = target
     token = current_target.set(target)

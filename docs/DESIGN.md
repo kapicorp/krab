@@ -249,7 +249,9 @@ document through a recording view: each `parameters.<key>` it reads is
 noted (iteration, Box methods and writes count as reading all of it), the
 way `inventory_global()` records other targets. The manifest keeps, per
 kadet item, the digest of the item definition, the digests of the document
-parts it read, its file and target dependencies and the files it wrote. When
+parts it read, its file and target dependencies and the files it wrote.
+Reads of earlier items of the same target count too, since a module they
+imported is not imported again. When
 all of those still match, the previous output files are copied into the new
 compile tree; `compiled ... (0.14s, 2 kadet items reused)` says so. On
 grid, a change to a parameter no generator reads recompiles a chart-heavy
