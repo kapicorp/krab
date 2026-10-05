@@ -33,3 +33,6 @@ ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

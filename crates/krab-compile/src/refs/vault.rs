@@ -78,6 +78,17 @@ pub fn param_str(params: &Json, key: &str) -> Option<String> {
     }
 }
 
+/// Whether `skip_verify` was set rather than defaulted: in `inventory` (the
+/// target's `parameters.kapitan.secrets.vault*`) or by `VAULT_SKIP_VERIFY`.
+/// A ref file always carries the value, so it never counts.
+pub fn skip_verify_explicit(inventory: Option<&Json>) -> bool {
+    // Only a request to skip counts: `false` asks for verification, and a
+    // ref file's `skip_verify: true` must not silence the warning for it.
+    let truthy = |v: &str| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes");
+    inventory.is_some_and(|i| param_bool(i, "skip_verify"))
+        || std::env::var("VAULT_SKIP_VERIFY").is_ok_and(|v| truthy(&v))
+}
+
 pub fn param_bool(params: &Json, key: &str) -> bool {
     match params.get(key) {
         Some(Json::Bool(b)) => *b,
@@ -93,12 +104,16 @@ pub struct Clients {
 }
 
 impl Clients {
-    pub fn get(&self, params: &Json) -> Result<Arc<VaultClient>, RefError> {
+    /// The client for `params`; `explicit` as from [`skip_verify_explicit`].
+    pub fn get(&self, params: &Json, explicit: bool) -> Result<Arc<VaultClient>, RefError> {
         let key = params.to_string();
         if let Some(c) = self.clients.lock().get(&key) {
             return Ok(c.clone());
         }
-        let client = Arc::new(VaultClient::connect(params)?);
+        let client = Arc::new(VaultClient::connect(params, explicit)?);
+        if let Some(w) = &client.tls_warning {
+            tracing::warn!("{w}");
+        }
         self.clients.lock().insert(key, client.clone());
         Ok(client)
     }
@@ -109,6 +124,9 @@ pub struct VaultClient {
     base: String,
     token: String,
     namespace: Option<String>,
+    /// Set when the certificate failed verification and the client went on
+    /// without it.
+    tls_warning: Option<String>,
 }
 
 fn read_token_file() -> Result<String, RefError> {
@@ -129,7 +147,10 @@ fn read_token_file() -> Result<String, RefError> {
 }
 
 impl VaultClient {
-    pub fn connect(params: &Json) -> Result<VaultClient, RefError> {
+    /// `skip_verify: true` that is not `explicit` is kapitan's default: the
+    /// certificate is verified with the webpki roots and, when that fails,
+    /// the client warns and continues unverified.
+    pub fn connect(params: &Json, explicit: bool) -> Result<VaultClient, RefError> {
         let base = param_str(params, "addr")
             .filter(|a| !a.is_empty())
             .ok_or_else(|| {
@@ -138,9 +159,10 @@ impl VaultClient {
                         .into(),
                 )
             })?;
+        let skip_verify = param_bool(params, "skip_verify");
         let mut tls = ureq::tls::TlsConfig::builder();
-        if param_bool(params, "skip_verify") {
-            tls = tls.disable_verification(true);
+        if skip_verify {
+            tls = tls.disable_verification(explicit);
         } else {
             let bundle = param_str(params, "cacert")
                 .filter(|s| !s.is_empty())
@@ -200,18 +222,46 @@ impl VaultClient {
                 .ok_or_else(|| RefError(format!("{key_path} holds no private key")))?;
             tls = tls.client_cert(Some(ureq::tls::ClientCert::new_with_certs(&certs, key)));
         }
-        let agent = ureq::Agent::config_builder()
-            .tls_config(tls.build())
-            .http_status_as_error(false)
-            .timeout_global(Some(Duration::from_secs(60)))
-            .user_agent(format!("kapitan/{}", env!("CARGO_PKG_VERSION")))
-            .build()
-            .new_agent();
+        let tls = tls.build();
+        let new_agent = |tls: ureq::tls::TlsConfig| {
+            ureq::Agent::config_builder()
+                .tls_config(tls)
+                .http_status_as_error(false)
+                .timeout_global(Some(Duration::from_secs(60)))
+                .user_agent(format!("kapitan/{}", env!("CARGO_PKG_VERSION")))
+                .build()
+                .new_agent()
+        };
+        let base = base.trim_end_matches('/').to_string();
+        let mut agent = new_agent(tls.clone());
+        let mut tls_warning = None;
+        if skip_verify && !explicit && base.starts_with("https://") {
+            // `sys/health` needs no token. A failure that an unverified
+            // request does not repeat is the certificate's.
+            let health = format!("{base}/v1/sys/health");
+            if let Err(e) = agent.get(&health).call() {
+                let unverified = new_agent(
+                    ureq::tls::TlsConfig::builder()
+                        .disable_verification(true)
+                        .client_cert(tls.client_cert().cloned())
+                        .build(),
+                );
+                if unverified.get(&health).call().is_ok() {
+                    tls_warning = Some(format!(
+                        "vault {base}: TLS verification failed ({e}); continuing without it. \
+                         Set skip_verify: true (or VAULT_SKIP_VERIFY=true) to keep that, or \
+                         skip_verify: false with a CA; a later release fails here"
+                    ));
+                    agent = unverified;
+                }
+            }
+        }
         let mut client = VaultClient {
             agent,
-            base: base.trim_end_matches('/').to_string(),
+            base,
             token: String::new(),
             namespace: param_str(params, "namespace").filter(|s| !s.is_empty()),
+            tls_warning,
         };
         client.authenticate(params)?;
         Ok(client)
@@ -664,5 +714,122 @@ mod tests {
         let err = rc2.reveal_str(&out, &mut reads).unwrap_err().0;
         assert!(err.contains("Authentication Error"), "{err}");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A self-signed certificate for 127.0.0.1, valid until 2126.
+    const SELF_SIGNED_CERT: &str = r"-----BEGIN CERTIFICATE-----
+MIIBbzCCARWgAwIBAgIULSPtnm4YraNp1CUnhwpH2DX1wt8wCgYIKoZIzj0EAwIw
+FDESMBAGA1UEAwwJMTI3LjAuMC4xMCAXDTI2MTAwNTExMjg0MFoYDzIxMjYwOTEx
+MTEyODQwWjAUMRIwEAYDVQQDDAkxMjcuMC4wLjEwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAATJyP1qGh5wnBP/4jOc1dhTG59tWxjwxQZIUmvj2F3GgmMg0Jaz4TzO
++wQYbCFn/kuxqTMTeVPfrFFvUq8kmnu7o0MwQTAdBgNVHQ4EFgQUs8mjJgJ2zVae
+F8DoYeJrFS/K05IwDwYDVR0TAQH/BAUwAwEB/zAPBgNVHREECDAGhwR/AAABMAoG
+CCqGSM49BAMCA0gAMEUCIQCIvo4IUimoE3PgmMb246pueKICd+6Jv4t/StU4kZML
+eAIgPvvewcx9GzeKI5AJuU+aPRS1NhlENuN+N+y1sZggnHg=
+-----END CERTIFICATE-----";
+    const SELF_SIGNED_KEY: &str = r"-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgttUCA7SGXpbyaFOl
+YvEMJgoI+PQcf90TXxbIDFyfv0OhRANCAATJyP1qGh5wnBP/4jOc1dhTG59tWxjw
+xQZIUmvj2F3GgmMg0Jaz4TzO+wQYbCFn/kuxqTMTeVPfrFFvUq8kmnu7
+-----END PRIVATE KEY-----";
+
+    /// An https server with a self-signed certificate that answers every
+    /// request with 200 and a token lookup body.
+    fn mock_https_vault() -> String {
+        use std::sync::Arc;
+        let cert = ureq::tls::parse_pem(SELF_SIGNED_CERT.as_bytes())
+            .find_map(|i| match i {
+                Ok(ureq::tls::PemItem::Certificate(c)) => Some(c.der().to_vec()),
+                _ => None,
+            })
+            .unwrap();
+        let key = ureq::tls::parse_pem(SELF_SIGNED_KEY.as_bytes())
+            .find_map(|i| match i {
+                Ok(ureq::tls::PemItem::PrivateKey(k)) => Some(k.der().to_vec()),
+                _ => None,
+            })
+            .unwrap();
+        let config = Arc::new(
+            rustls::ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![cert.into()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(key).into(),
+            )
+            .unwrap(),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = format!("https://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let conn = rustls::ServerConnection::new(config.clone()).unwrap();
+                let mut reader = BufReader::new(rustls::StreamOwned::new(conn, stream.unwrap()));
+                let mut len = 0;
+                loop {
+                    let mut h = String::new();
+                    if reader.read_line(&mut h).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let h = h.trim_end().to_lowercase();
+                    if let Some(v) = h.strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap();
+                    }
+                    if h.is_empty() {
+                        let mut body = vec![0u8; len];
+                        let _ = reader.read_exact(&mut body);
+                        let text = r#"{"data": {"id": "t"}}"#;
+                        let stream = reader.get_mut();
+                        let _ = write!(
+                            stream,
+                            "HTTP/1.1 200 X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{text}",
+                            text.len()
+                        );
+                        let _ = stream.flush();
+                        stream.conn.send_close_notify();
+                        let _ = stream.flush();
+                        break;
+                    }
+                }
+            }
+        });
+        addr
+    }
+
+    /// Without an explicit `skip_verify`, the certificate is verified; when
+    /// that fails, the client warns and continues unverified. An explicit
+    /// `skip_verify: true` connects unverified without a warning (#216).
+    #[test]
+    fn tls_is_verified_unless_skip_verify_is_explicit() {
+        let addr = mock_https_vault();
+        // SAFETY: every test that sets it sets a non-empty token, and this
+        // server accepts any.
+        unsafe { std::env::set_var("VAULT_TOKEN", "s.token") };
+        let raw = json!({"auth": "token", "addr": addr});
+        let params = normalize_params(Some(&raw), RefType::VaultKv);
+        assert_eq!(
+            params["skip_verify"], true,
+            "the ref file layout keeps the default"
+        );
+        assert!(!skip_verify_explicit(Some(&raw)));
+        assert!(skip_verify_explicit(Some(&json!({"skip_verify": true}))));
+        // Asking for verification never counts as an explicit skip, even
+        // when the ref file still carries `skip_verify: true`.
+        assert!(!skip_verify_explicit(Some(&json!({"skip_verify": false}))));
+        let client = VaultClient::connect(&params, false).unwrap();
+        let warning = client.tls_warning.as_deref().unwrap_or_default();
+        assert!(
+            warning.contains(&addr) && warning.contains("skip_verify"),
+            "{warning:?}"
+        );
+        let client = VaultClient::connect(&params, true).unwrap();
+        assert_eq!(client.tls_warning, None);
+        // Explicit `false` without a CA fails as before.
+        let mut strict = params.clone();
+        strict["skip_verify"] = json!(false);
+        assert!(VaultClient::connect(&strict, true).is_err());
     }
 }

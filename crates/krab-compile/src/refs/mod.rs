@@ -602,7 +602,7 @@ impl RefController {
                     .vault_params
                     .clone()
                     .unwrap_or_else(|| vault::normalize_params(None, RefType::VaultKv));
-                let client = self.vault.get(&params)?;
+                let client = self.vault.get(&params, vault::skip_verify_explicit(None))?;
                 let data = utf8(b64_decode(&r.data)?, "vaultkv")?;
                 let (secret_path, secret_key) = data.split_once(':').ok_or_else(|| {
                     RefError(format!(
@@ -623,7 +623,7 @@ impl RefController {
                     .vault_params
                     .clone()
                     .unwrap_or_else(|| vault::normalize_params(None, RefType::VaultTransit));
-                let client = self.vault.get(&params)?;
+                let client = self.vault.get(&params, vault::skip_verify_explicit(None))?;
                 let key = vault::param_str(&params, "crypto_key")
                     .ok_or_else(|| RefError("Cannot access vault params".into()))?;
                 let mount = vault::param_str(&params, "mount").unwrap_or_else(|| "transit".into());
@@ -843,12 +843,22 @@ impl RefController {
                         "Could not create VaultSecret: vaultkv: key is missing".into(),
                     ));
                 }
-                self.write_vaultkv(&params, payload, encoding, &mount, path_in_vault, attrs[4])
+                let explicit = vault::skip_verify_explicit(target.section("vaultkv"));
+                self.write_vaultkv(
+                    &params,
+                    explicit,
+                    payload,
+                    encoding,
+                    &mount,
+                    path_in_vault,
+                    attrs[4],
+                )
             }
             RefType::VaultTransit => {
                 let params =
                     vault::normalize_params(target.section("vaulttransit"), RefType::VaultTransit);
-                self.encrypt_vaulttransit(&params, payload, encoding)
+                let explicit = vault::skip_verify_explicit(target.section("vaulttransit"));
+                self.encrypt_vaulttransit(&params, explicit, payload, encoding)
             }
             RefType::Base64 => Ok(Ref::new(RefType::Base64, b64_encode(payload), encoding)),
             RefType::Plain | RefType::Env => {
@@ -899,9 +909,11 @@ impl RefController {
     }
 
     /// Store `payload` as `key` of the Vault KV secret at `mount`/`path`.
+    #[allow(clippy::too_many_arguments)]
     pub fn write_vaultkv(
         &self,
         params: &Json,
+        skip_verify_explicit: bool,
         payload: &[u8],
         encoding: &str,
         mount: &str,
@@ -911,7 +923,7 @@ impl RefController {
         let text = String::from_utf8(payload.to_vec())
             .map_err(|e| RefError(format!("vaultkv secret is not UTF-8: {e}")))?;
         let engine = vault::param_str(params, "engine").unwrap_or_else(|| "kv-v2".into());
-        let client = self.vault.get(params)?;
+        let client = self.vault.get(params, skip_verify_explicit)?;
         let mut secrets = client
             .kv_read(&engine, mount, path)?
             .unwrap_or(Json::Object(Default::default()));
@@ -932,6 +944,7 @@ impl RefController {
     pub fn encrypt_vaulttransit(
         &self,
         params: &Json,
+        skip_verify_explicit: bool,
         payload: &[u8],
         encoding: &str,
     ) -> Result<Ref, RefError> {
@@ -942,7 +955,7 @@ impl RefController {
             )
         })?;
         let mount = vault::param_str(params, "mount").unwrap_or_else(|| "transit".into());
-        let client = self.vault.get(params)?;
+        let client = self.vault.get(params, skip_verify_explicit)?;
         let ciphertext = client.transit_encrypt(&mount, &key, &b64_encode(payload))?;
         let mut r = Ref::new(
             RefType::VaultTransit,

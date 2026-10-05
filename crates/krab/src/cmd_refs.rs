@@ -332,12 +332,22 @@ fn write(app: &App, args: &RefsArgs, rc: &RefController, token: &str) -> Result<
             let key = args.vault_key.as_deref().ok_or_else(|| {
                 Failure::Message("Could not create VaultSecret: vaultkv: key is missing".into())
             })?;
-            rc.write_vaultkv(&params, &payload, encoding, &mount, &path_in_vault, key)
-                .map_err(fail)?
+            let explicit = vault::skip_verify_explicit(ts.section("vaultkv"));
+            rc.write_vaultkv(
+                &params,
+                explicit,
+                &payload,
+                encoding,
+                &mount,
+                &path_in_vault,
+                key,
+            )
+            .map_err(fail)?
         }
         RefType::VaultTransit => {
             let params = vault_params(args, &ts, RefType::VaultTransit)?;
-            rc.encrypt_vaulttransit(&params, &payload, encoding)
+            let explicit = vault::skip_verify_explicit(ts.section("vaulttransit"));
+            rc.encrypt_vaulttransit(&params, explicit, &payload, encoding)
                 .map_err(fail)?
         }
         RefType::Base64 => Ref::new(RefType::Base64, b64_encode(&payload), encoding),
@@ -639,7 +649,12 @@ fn update_validate(app: &App, args: &RefsArgs, rc: &RefController) -> Result<(),
                             vault::normalize_params(Some(section), RefType::VaultTransit);
                         params["crypto_key"] = Json::String(key.unwrap().to_string());
                         let new = rc
-                            .encrypt_vaulttransit(&params, &payload, &r.encoding)
+                            .encrypt_vaulttransit(
+                                &params,
+                                vault::skip_verify_explicit(Some(section)),
+                                &payload,
+                                &r.encoding,
+                            )
                             .map_err(fail)?;
                         rc.write(&rel, &new).map_err(fail)?;
                     }
