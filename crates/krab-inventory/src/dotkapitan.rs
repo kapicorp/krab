@@ -7,6 +7,19 @@ use crate::source::SourceId;
 use crate::value::{Map, Node, Value};
 use crate::yaml::parse_document;
 
+/// The kapitan release whose output krab reproduces; a `.kapitan` `version:`
+/// is checked against it.
+pub const REFERENCE_VERSION: &str = "0.36.3";
+
+/// kapitan's `compare_versions(pin, version) == "equal"`: the components both
+/// have are compared as strings, `-rc` only when both have more than two.
+fn same_version(pin: &str, version: &str) -> bool {
+    let (a, b) = (pin.replace("-rc", ""), version.replace("-rc", ""));
+    let (a, b): (Vec<&str>, Vec<&str>) = (a.split('.').collect(), b.split('.').collect());
+    let n = a.len().min(b.len());
+    a[..n] == b[..n] && (n <= 2 || pin.contains("-rc") == version.contains("-rc"))
+}
+
 /// The `inventory.python-resolvers` section: a user `resolvers.py` run in a
 /// Python worker (see `resolvers::python`). Either a path, `false`, or a map:
 ///
@@ -57,6 +70,10 @@ impl PythonResolverSettings {
 
 #[derive(Clone, Debug, Default)]
 pub struct DotKapitan {
+    /// The top-level `version:` as Python's `str()` prints it, unless falsy.
+    pub version: Option<String>,
+    /// `version:` is a YAML float, so `0.30` arrives as `0.3`.
+    pub version_is_float: bool,
     pub inventory_path: Option<PathBuf>,
     pub compose_target_name: Option<bool>,
     pub inventory_backend: Option<String>,
@@ -72,6 +89,8 @@ pub struct DotKapitan {
     pub inventory: Map,
     /// The raw `refs:` section.
     pub refs: Map,
+    /// The raw `global:` section, the fallback for every other section.
+    pub global: Map,
 }
 
 impl DotKapitan {
@@ -85,6 +104,14 @@ impl DotKapitan {
         let node = parse_document(&text, SourceId::SYNTHETIC)?;
         let mut cfg = DotKapitan {
             file: Some(file),
+            version: node
+                .get("version")
+                .filter(|n| n.value.truthy())
+                .map(|n| n.value.py_str()),
+            version_is_float: matches!(
+                node.get("version").map(|n| &n.value),
+                Some(Value::Float(_))
+            ),
             compile: node
                 .get("compile")
                 .and_then(Node::as_map)
@@ -97,6 +124,11 @@ impl DotKapitan {
                 .unwrap_or_default(),
             refs: node
                 .get("refs")
+                .and_then(Node::as_map)
+                .cloned()
+                .unwrap_or_default(),
+            global: node
+                .get("global")
                 .and_then(Node::as_map)
                 .cloned()
                 .unwrap_or_default(),
@@ -123,7 +155,7 @@ impl DotKapitan {
         }
         cfg.legacy_backend_key =
             section("inventory_backend").is_some_and(|m| m.get("inventory-backend").is_none());
-        if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
+        if let Some(Value::Int(i)) = get(&["inventory", "global"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
         }
         if let Some(n) = cfg.inventory.get("python-resolvers") {
@@ -151,9 +183,29 @@ impl DotKapitan {
         ))
     }
 
+    /// kapitan's `from_dot_kapitan`: the command's section, then `global`.
+    fn setting<'a>(&'a self, section: &'a Map, key: &str) -> Option<&'a Node> {
+        section.get(key).or_else(|| self.global.get(key))
+    }
+
+    /// Why kapitan 0.36.3 would refuse to compile: `version` does not match it.
+    pub fn version_mismatch(&self) -> Option<String> {
+        let pin = self.version.as_deref()?;
+        (!same_version(pin, REFERENCE_VERSION)).then(|| {
+            let number = if self.version_is_float {
+                format!(" `version` is read as the number {pin}; quote it to keep it as written.")
+            } else {
+                String::new()
+            };
+            format!(
+                "`.kapitan` pins kapitan {pin}, krab matches kapitan {REFERENCE_VERSION}.{number} Update `version` in `.kapitan`, or skip this check with `--ignore-version-check` (`compile.ignore-version-check: true` in `.kapitan`)"
+            )
+        })
+    }
+
     /// A string list from the compile section (`search-paths`).
     pub fn compile_strings(&self, key: &str) -> Option<Vec<String>> {
-        match &self.compile.get(key)?.value {
+        match &self.setting(&self.compile, key)?.value {
             Value::List(l) => Some(
                 l.iter()
                     .filter_map(|n| n.as_str().map(str::to_string))
@@ -165,37 +217,34 @@ impl DotKapitan {
     }
 
     pub fn compile_str(&self, key: &str) -> Option<String> {
-        self.compile
-            .get(key)
+        self.setting(&self.compile, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
 
     pub fn compile_bool(&self, key: &str) -> Option<bool> {
-        match self.compile.get(key)?.value {
+        match self.setting(&self.compile, key)?.value {
             Value::Bool(b) => Some(b),
             _ => None,
         }
     }
 
     pub fn compile_int(&self, key: &str) -> Option<i64> {
-        match self.compile.get(key)?.value {
+        match self.setting(&self.compile, key)?.value {
             Value::Int(i) => Some(i),
             _ => None,
         }
     }
 
     pub fn inventory_str(&self, key: &str) -> Option<String> {
-        self.inventory
-            .get(key)
+        self.setting(&self.inventory, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
 
     /// A string from the refs section (`refs-path`).
     pub fn refs_str(&self, key: &str) -> Option<String> {
-        self.refs
-            .get(key)
+        self.setting(&self.refs, key)
             .and_then(|n| n.as_str())
             .map(str::to_string)
     }
@@ -226,6 +275,61 @@ mod tests {
             Some("literal")
         );
         assert_eq!(dot.python_resolvers, PythonResolverSettings::default());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn section_keys_fall_back_to_global() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-global-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "global:\n  output-path: out\n  prune: true\n  indent: 4\n  search-paths: [lib]\n  refs-path: secrets\n  multiline-string-style: literal\ncompile:\n  output-path: build\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        // The command's section wins over `global`.
+        assert_eq!(dot.compile_str("output-path").as_deref(), Some("build"));
+        assert_eq!(dot.compile_bool("prune"), Some(true));
+        assert_eq!(dot.compile_int("indent"), Some(4));
+        assert_eq!(
+            dot.compile_strings("search-paths"),
+            Some(vec!["lib".to_string()])
+        );
+        assert_eq!(dot.compile_str("refs-path").as_deref(), Some("secrets"));
+        assert_eq!(dot.indent, Some(4));
+        assert_eq!(
+            dot.inventory_str("multiline-string-style").as_deref(),
+            Some("literal")
+        );
+        assert_eq!(dot.refs_str("refs-path").as_deref(), Some("secrets"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn version_must_match_the_reference() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-version-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mismatch = |v: &str| {
+            std::fs::write(dir.join(".kapitan"), format!("version: {v}\n")).unwrap();
+            DotKapitan::load(&dir).unwrap().version_mismatch()
+        };
+        // kapitan 0.36.3 compares the common components as strings, and
+        // `-rc` only when both have more than two.
+        for ok in ["0.36", "0.36.3", "'0.36.3.1'", "''", "null", "0"] {
+            assert_eq!(mismatch(ok), None, "{ok}");
+        }
+        for bad in ["99.0", "0.36.4", "'0.36.3-rc'", "0.4", "0.30", "1"] {
+            assert!(mismatch(bad).is_some(), "{bad}");
+        }
+        let msg = mismatch("0.30").unwrap();
+        assert!(
+            msg.contains("kapitan 0.3,")
+                && msg.contains("read as the number 0.3; quote it")
+                && msg.contains("--ignore-version-check"),
+            "{msg}"
+        );
+        assert!(!mismatch("'0.30'").unwrap().contains("number"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

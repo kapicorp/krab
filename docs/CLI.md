@@ -102,6 +102,7 @@ Compile the targets whose inputs changed.
 | `--output-path <DIR>` | where `compiled/` lives (default: `compile.output-path` from `.kapitan`, else `.`) |
 | `--reveal` | reveal refs in the output instead of compiling them (default: `compile.reveal` from `.kapitan`) |
 | `--embed-refs` | embed the ref files' contents in the output instead of writing hashed tags (default: `compile.embed-refs` from `.kapitan`) |
+| `--ignore-version-check` | compile even when `version` in `.kapitan` does not match kapitan 0.36.3 (default: `compile.ignore-version-check` from `.kapitan`) |
 | `--python <PATH>` | Python used to evaluate kadet components, as it is (with `--backend python`, one with kapitan installed). Default: `$KRAB_PYTHON`, else the venv krab builds from `compile.python-requirements` |
 | `--flag <FLAG>` | extra flag passed through to kapitan's compile in the Python backend (e.g. `--indent 4`) |
 | `--backend native\|python` | `native` (default): input types run in Rust, Python only evaluates kadet `main()`. `python`: kapitan's own input types in worker processes |
@@ -288,10 +289,13 @@ changing variables your inventory reads.
 ## `.kapitan`
 
 Read from the working directory. Recognised keys, in the sections kapitan
-itself uses:
+itself uses. A key missing from its `compile`, `inventory` or `refs` section
+is taken from `global`, as kapitan does:
 
 | key | section(s) | use |
 |---|---|---|
+| `version` | top level | `krab compile` refuses to run unless it matches kapitan 0.36.3, compared as kapitan compares it (`0.36` matches) |
+| `ignore-version-check` | `compile` | skip that check |
 | `inventory-path` | `compile`, `inventory`, `global` | inventory directory |
 | `compose-node-name` / `compose-target-name` | `compile`, `inventory`, `global` | dotted target names from the directory layout (default: off) |
 | `inventory-backend` | `inventory_backend`, `global` | only `omegaconf` is implemented; any other value, or none, prints a warning because kapitan would render with reclass |

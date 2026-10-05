@@ -72,6 +72,11 @@ pub struct CompileArgs {
     #[arg(long)]
     embed_refs: bool,
 
+    /// Compile even when `version` in .kapitan does not match kapitan 0.36.3
+    /// (default: `compile.ignore-version-check` from .kapitan)
+    #[arg(long)]
+    ignore_version_check: bool,
+
     /// Python used to evaluate kadet components, as it is (with `--backend
     /// python`, one with kapitan installed). Default: the environment krab
     /// builds from `compile.python-requirements` in .kapitan
@@ -96,6 +101,15 @@ pub enum BackendArg {
 
 pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
     let start = std::time::Instant::now();
+    if !(args.ignore_version_check
+        || app
+            .dot
+            .compile_bool("ignore-version-check")
+            .unwrap_or(false))
+        && let Some(m) = app.dot.version_mismatch()
+    {
+        return Err(Failure::Message(m));
+    }
     let repo_root = app.cwd.clone();
     let output_path = args
         .output_path
