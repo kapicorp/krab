@@ -65,6 +65,9 @@ pub struct DotKapitan {
     pub legacy_backend_key: bool,
     pub indent: Option<usize>,
     pub python_resolvers: PythonResolverSettings,
+    /// `inventory.contrib-resolvers: true` silences the krab extension
+    /// warning for the `contrib` resolvers.
+    pub contrib_resolvers: bool,
     pub file: Option<PathBuf>,
     /// The raw `compile:` section, keys as written (`search-paths`, `output-path`, ...).
     pub compile: Map,
@@ -126,6 +129,10 @@ impl DotKapitan {
         if let Some(Value::Int(i)) = get(&["inventory"], "indent") {
             cfg.indent = Some(i.max(1) as usize);
         }
+        cfg.contrib_resolvers = matches!(
+            get(&["inventory"], "contrib-resolvers"),
+            Some(Value::Bool(true))
+        );
         if let Some(n) = cfg.inventory.get("python-resolvers") {
             cfg.python_resolvers = PythonResolverSettings::from_node(n);
         }

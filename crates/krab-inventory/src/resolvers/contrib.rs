@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::{Ctx, Registry, ResolverError, ResolverResult, arity, as_int, as_py_str, as_str};
 use crate::emit::yaml::{DumpOptions, dump_yaml};
+use crate::error::Diagnostic;
 use crate::pyfmt::json_dumps;
 use crate::value::{Map, Node, Value};
 
@@ -26,6 +27,34 @@ pub fn register(r: &mut Registry) {
     r.register("filter_keys", filter_keys);
     r.register("join", join);
     r.register("join_quoted", join_quoted);
+}
+
+/// Make every `contrib` resolver warn, once per name and render, that
+/// kapitan does not have it. Names in `kapitan_has` (defined by the
+/// inventory's `resolvers.py`) are skipped: kapitan renders those.
+pub fn warn_as_extensions(r: &mut Registry, kapitan_has: &[String]) {
+    let mut contrib = Registry::new();
+    register(&mut contrib);
+    for name in contrib.names() {
+        if kapitan_has.contains(&name) {
+            continue;
+        }
+        let Some(f) = r.get(&name) else { continue };
+        let message = format!(
+            "krab extension: `{name}` is not a kapitan resolver; kapitan 0.36.3 fails with \
+             Unsupported interpolation type. Set inventory.contrib-resolvers: true to silence"
+        );
+        r.register(&name, move |ctx, args| {
+            if !ctx.ev.warnings.iter().any(|w| w.message == message) {
+                let d = Diagnostic::warning("resolver::krab_extension", message.clone())
+                    .with_target(ctx.ev.target)
+                    .with_path(ctx.at.to_string())
+                    .with_label(ctx.origin, "in this value");
+                ctx.ev.warnings.push(d);
+            }
+            f(ctx, args)
+        });
+    }
 }
 
 fn replace(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {

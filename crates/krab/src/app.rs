@@ -7,6 +7,7 @@ use std::time::Duration;
 use krab_inventory::dotkapitan::DotKapitan;
 use krab_inventory::emit::yaml::{DumpOptions, dump_yaml};
 use krab_inventory::error::Diagnostic;
+use krab_inventory::resolvers::contrib;
 use krab_inventory::resolvers::python::{PythonConfig, PythonResolvers};
 use krab_inventory::{Inventory, InventoryConfig, Map, Node, Registry, Value};
 use krab_server::protocol::AllResult;
@@ -92,6 +93,7 @@ impl App {
         cfg.compose_target_name = dot.compose_target_name.unwrap_or(false);
         cfg.normalize = !raw;
         let mut registry = Registry::with_builtins();
+        let mut python_names = Vec::new();
         match PythonConfig::discover(&inventory_path, &cwd, &dot.python_resolvers) {
             Some(python) => {
                 if !python.python.exists() {
@@ -102,7 +104,7 @@ impl App {
                 }
                 tracing::info!(file = %python.file.display(), python = %python.python.description, "Python resolvers configured");
                 let resolvers = PythonResolvers::new(python);
-                PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
+                let loaded = PythonResolvers::install(&resolvers, &mut registry).map_err(|e| {
                     Failure::Diagnostics(
                         vec![Diagnostic::error("inventory::python_resolvers", e).with_help(
                             "fix the file, point `inventory.python-resolvers.file` in `.kapitan` elsewhere, or set `inventory.python-resolvers: false`",
@@ -110,11 +112,15 @@ impl App {
                         json,
                     )
                 })?;
+                python_names = loaded.resolvers.into_keys().collect();
             }
             None if dot.python_resolvers.enabled == Some(false) => {
                 registry.set_description("Python resolvers disabled in .kapitan");
             }
             None => registry.set_description("no resolvers.py found, native resolvers only"),
+        }
+        if !dot.contrib_resolvers {
+            contrib::warn_as_extensions(&mut registry, &python_names);
         }
         // The server is configured from `.kapitan` (inventory settings, the
         // Python resolver setup): an edit restarts it like a resolvers.py edit.

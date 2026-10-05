@@ -109,6 +109,10 @@ Three sets ship: `oc.*`, kapitan's built-ins (`key`, `parentkey`, `escape`,
 `if`/`ifelse`/`and`/`or`/`not`/`equal`, `merge`, `dict`, `list`, `yaml`,
 `add`, `default`, …) and `contrib` (`replace`, `json`, `to_yaml`, `sha256`,
 `truncate`, `pluck`, `select_fields`, `filter_keys`, `join`, …).
+kapitan has no `contrib` resolver, so a target that uses one warns once per
+name (`resolver::krab_extension`) unless `.kapitan` sets
+`inventory.contrib-resolvers: true`; a same-named function in `resolvers.py`
+does not warn.
 
 Boolean resolvers use Python truthiness, so `${if:nonempty,…}` is true
 (D6 in [DECISIONS.md](DECISIONS.md)).
