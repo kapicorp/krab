@@ -10,12 +10,14 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
 }
 
-/// The expected documents are generated with `compose_target_name=True`
-/// (`tests/fixtures/generate_expected.py`), so the fixture inventory is opened
-/// the same way; the default is off, as in the reference.
+/// The expected documents are generated with `compose_target_name=True` and
+/// `enable_class_wildcards=True` (`tests/fixtures/generate_expected.py`), so
+/// the fixture inventory is opened the same way; both default to off, as in
+/// the reference.
 fn fixture_inventory() -> Inventory {
     let mut cfg = InventoryConfig::new(fixtures().join("inventory"));
     cfg.compose_target_name = true;
+    cfg.class_wildcards = true;
     Inventory::new(
         cfg,
         std::sync::Arc::new(krab_inventory::resolvers::Registry::with_builtins()),

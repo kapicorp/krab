@@ -142,6 +142,7 @@ fn fixture_inventory_matches_the_reference_through_python() {
     // As `generate_expected.py` renders it.
     let mut cfg = InventoryConfig::new(root);
     cfg.compose_target_name = true;
+    cfg.class_wildcards = true;
     let inv = Inventory::new(cfg, Arc::new(registry));
     let report = inv.render_all().expect("discover targets");
     if let Some(e) = report.errors.first() {

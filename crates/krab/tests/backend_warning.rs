@@ -29,5 +29,16 @@ fn warns_when_the_backend_is_not_omegaconf() {
     .unwrap();
     let quiet = stderr();
     assert!(!quiet.contains("warning:"), "{quiet}");
+
+    std::fs::write(
+        dir.join(".kapitan"),
+        "global:\n  inventory-backend: omegaconf\ncompile:\n  prnue: true\n",
+    )
+    .unwrap();
+    let typo = stderr();
+    assert!(
+        typo.contains("warning: `.kapitan`: unknown key `compile.prnue`"),
+        "{typo}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

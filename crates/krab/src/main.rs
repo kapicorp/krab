@@ -47,6 +47,11 @@ struct Cli {
     )]
     no_daemon: bool,
 
+    /// Expand glob patterns (`comp.*`) in `classes` lists, as kapitan's
+    /// `--enable-class-wildcards` (default: `enable-class-wildcards` from .kapitan)
+    #[arg(long, global = true)]
+    enable_class_wildcards: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -146,7 +151,13 @@ fn run(cli: Cli) -> Result<(), Failure> {
     if let Command::Completions { shell } = cli.command {
         return completions::print_registration(shell).map_err(Failure::from);
     }
-    let app = App::new(cli.inventory_path, cli.json, cli.raw, cli.no_daemon)?;
+    let app = App::new(
+        cli.inventory_path,
+        cli.json,
+        cli.raw,
+        cli.no_daemon,
+        cli.enable_class_wildcards,
+    )?;
     match cli.command {
         Command::Inventory(args) => cmd_inventory::run(&app, args),
         Command::Compile(args) => cmd_compile::run(&app, args),

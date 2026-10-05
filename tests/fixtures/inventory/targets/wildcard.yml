@@ -1,0 +1,7 @@
+# Wildcard class entries (enable-class-wildcards): `wild.*` expands in place
+# to the sorted matches, `wild.b` already listed stays first, `wild.[!b]` only
+# repeats `wild.a`, and the hidden `.hidden.yml` is not a class.
+classes:
+  - wild.b
+  - wild.*
+  - wild.[!b]

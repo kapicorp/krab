@@ -144,8 +144,12 @@ impl State {
         {
             let inner = self.inner.read();
             for path in &changed {
-                if let Some(names) = inner.index.get(path) {
-                    affected.extend(names.iter().cloned());
+                // The path itself, or a probed directory above it (the
+                // `classes/` listing behind a wildcard class entry).
+                for p in path.ancestors() {
+                    if let Some(names) = inner.index.get(p) {
+                        affected.extend(names.iter().cloned());
+                    }
                 }
                 if !path.is_file() {
                     // A directory (or something that no longer exists): every

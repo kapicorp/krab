@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::Serialize;
 
-use crate::classfile::ClassDoc;
+use crate::classfile::{ClassDoc, ClassRef};
 use crate::error::{Diagnostic, Error, Result};
 use crate::interp::eval::{Evaluator, ResolveEvent};
 use crate::merge::{MergeDeref, MergeEvent, merge};
@@ -29,6 +29,9 @@ pub struct InventoryConfig {
     /// or the older `compile.compose-node-name`).
     pub compose_target_name: bool,
     pub ignore_class_not_found: bool,
+    /// Expand glob patterns in `classes` lists (`enable-class-wildcards`).
+    /// Off by default, as in the reference.
+    pub class_wildcards: bool,
     /// Record merge and resolution history for `explain`.
     pub track_provenance: bool,
     /// Apply kapitan's typed normalisation of `parameters.kapitan`.
@@ -43,6 +46,7 @@ impl InventoryConfig {
             root: root.into(),
             compose_target_name: false,
             ignore_class_not_found: false,
+            class_wildcards: false,
             track_provenance: true,
             normalize: true,
             passes: 3,
@@ -243,14 +247,17 @@ impl Inventory {
 
     /// Drop every cached closure that (transitively) depends on `paths`, by
     /// content or by class resolution. `files`/`probes` already list the
-    /// transitive inputs, so one pass over the cache is enough.
+    /// transitive inputs, so one pass over the cache is enough. A probed
+    /// directory (the `classes/` listing behind a wildcard) depends on every
+    /// path under it.
     pub fn invalidate_dependents(&self, paths: &[PathBuf]) {
         let mut closures = self.closures.lock();
         closures.retain(|_, c| {
-            !c.files
-                .iter()
-                .chain(c.probes.iter())
-                .any(|f| paths.contains(f))
+            !c.files.iter().any(|f| paths.contains(f))
+                && !c
+                    .probes
+                    .iter()
+                    .any(|f| paths.iter().any(|p| p.starts_with(f)))
         });
         let mut files = self.files.lock();
         for p in paths {
@@ -491,6 +498,82 @@ impl Inventory {
         ClassResolution { found: None, tried }
     }
 
+    /// kapitan's `expand_class_patterns` (kapicorp/kapitan#1084): `None`
+    /// when no entry is a pattern. Otherwise each pattern is replaced in place
+    /// by the sorted class names it matches and duplicates are dropped,
+    /// keeping the first. Entries containing `${` and entries naming an
+    /// existing class stay as written. A pattern that matches nothing is an
+    /// error on its entry (kapitan fails the whole inventory instead).
+    fn expand_class_patterns(&self, refs: &[ClassRef]) -> Result<Option<Vec<ClassRef>>> {
+        let is_pattern = |n: &str| n.contains(['*', '?', '[']);
+        let is_reference = |n: &str| n.contains("${") && n.contains('}');
+        if !refs
+            .iter()
+            .any(|r| is_pattern(&r.name) && !is_reference(&r.name))
+        {
+            return Ok(None);
+        }
+        // kapitan's `discover_classes`: `a/b.yml` and `a/b/init.yml` are
+        // `a.b`, a top-level `init.yml` is `init`, hidden entries are skipped.
+        let dir = self.cfg.classes_dir();
+        let mut available: Vec<String> = self
+            .class_files()?
+            .into_iter()
+            .filter_map(|(_, f)| {
+                let rel = f.strip_prefix(&dir).ok()?;
+                let mut parts: Vec<String> = Vec::new();
+                for c in rel.components() {
+                    let c = c.as_os_str().to_string_lossy();
+                    if c.starts_with('.') {
+                        return None;
+                    }
+                    parts.push(c.into_owned());
+                }
+                let file = parts.pop()?;
+                let stem = file.rsplit_once('.').map_or(file.as_str(), |(s, _)| s);
+                if stem != "init" || parts.is_empty() {
+                    parts.push(stem.to_string());
+                }
+                Some(parts.join("."))
+            })
+            .collect();
+        available.sort();
+        available.dedup();
+        let mut out: Vec<ClassRef> = Vec::new();
+        let mut push = |r: ClassRef| {
+            if !out.iter().any(|o| o.name == r.name) {
+                out.push(r);
+            }
+        };
+        for r in refs {
+            if is_reference(&r.name)
+                || available.binary_search(&r.name).is_ok()
+                || !is_pattern(&r.name)
+            {
+                push(r.clone());
+                continue;
+            }
+            let matches: Vec<&String> = available.iter().filter(|c| fnmatch(&r.name, c)).collect();
+            if matches.is_empty() && !self.cfg.ignore_class_not_found {
+                return Err(Error::new(
+                    "inventory::class_not_found",
+                    format!("class pattern `{}` did not match any classes", r.name),
+                )
+                .with_label(r.origin, "referenced here")
+                .with_help(
+                    "a pattern (`*`, `?`, `[...]`) matches whole dotted class names under `classes/`; relative patterns are not expanded",
+                ));
+            }
+            for m in matches {
+                push(ClassRef {
+                    name: m.clone(),
+                    origin: r.origin,
+                });
+            }
+        }
+        Ok(Some(out))
+    }
+
     fn class_closure(&self, file: &Path, stack: &mut Vec<PathBuf>) -> Result<Arc<ClassClosure>> {
         if let Some(c) = self.closures.lock().get(file) {
             return Ok(c.clone());
@@ -538,7 +621,17 @@ impl Inventory {
         };
         let mut nested_logs: Vec<Arc<Vec<MergeEvent>>> = Vec::new();
         let deref = EvalDeref { inv: self };
-        for class_ref in &doc.classes {
+        let expanded = if self.cfg.class_wildcards {
+            self.expand_class_patterns(&doc.classes)?
+        } else {
+            None
+        };
+        if expanded.is_some() {
+            // A class file added or removed anywhere under `classes/` can
+            // change what the patterns match.
+            probes.push(self.cfg.classes_dir());
+        }
+        for class_ref in expanded.as_deref().unwrap_or(&doc.classes) {
             let resolution = self.resolve_class_file(&class_ref.name, file);
             for p in &resolution.tried {
                 if !probes.contains(p) {
@@ -761,6 +854,91 @@ fn with_ext(p: &Path, ext: &str) -> PathBuf {
     PathBuf::from(s)
 }
 
+/// Python's `fnmatch.fnmatchcase`: `*` matches any run of characters, `?`
+/// one character, `[seq]` / `[!seq]` a character in (or not in) the set; a
+/// `[` without its `]` is a literal.
+fn fnmatch(pattern: &str, name: &str) -> bool {
+    enum Tok {
+        Star,
+        One,
+        Set(bool, Vec<(char, char)>),
+        Lit(char),
+    }
+    let p: Vec<char> = pattern.chars().collect();
+    let mut toks = Vec::new();
+    let mut i = 0;
+    while i < p.len() {
+        match p[i] {
+            '*' => toks.push(Tok::Star),
+            '?' => toks.push(Tok::One),
+            '[' => {
+                let mut j = i + 1;
+                if p.get(j) == Some(&'!') {
+                    j += 1;
+                }
+                if p.get(j) == Some(&']') {
+                    j += 1;
+                }
+                while j < p.len() && p[j] != ']' {
+                    j += 1;
+                }
+                if j >= p.len() {
+                    toks.push(Tok::Lit('['));
+                } else {
+                    let negate = p[i + 1] == '!';
+                    let body = &p[if negate { i + 2 } else { i + 1 }..j];
+                    let mut ranges = Vec::new();
+                    let mut k = 0;
+                    while k < body.len() {
+                        if k + 2 < body.len() && body[k + 1] == '-' {
+                            // A reversed range is empty, as in the reference.
+                            if body[k] <= body[k + 2] {
+                                ranges.push((body[k], body[k + 2]));
+                            }
+                            k += 3;
+                        } else {
+                            ranges.push((body[k], body[k]));
+                            k += 1;
+                        }
+                    }
+                    toks.push(Tok::Set(negate, ranges));
+                    i = j;
+                }
+            }
+            c => toks.push(Tok::Lit(c)),
+        }
+        i += 1;
+    }
+    let n: Vec<char> = name.chars().collect();
+    let one = |t: &Tok, c: char| match t {
+        Tok::One => true,
+        Tok::Lit(l) => *l == c,
+        Tok::Set(negate, ranges) => {
+            ranges.iter().any(|(lo, hi)| (*lo..=*hi).contains(&c)) != *negate
+        }
+        Tok::Star => unreachable!(),
+    };
+    // Greedy match with backtracking to the last `*`.
+    let (mut t, mut c) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while c < n.len() {
+        if t < toks.len() && matches!(toks[t], Tok::Star) {
+            star = Some((t, c));
+            t += 1;
+        } else if t < toks.len() && one(&toks[t], n[c]) {
+            t += 1;
+            c += 1;
+        } else if let Some((st, sc)) = star {
+            t = st + 1;
+            c = sc + 1;
+            star = Some((st, sc + 1));
+        } else {
+            return false;
+        }
+    }
+    toks[t..].iter().all(|t| matches!(t, Tok::Star))
+}
+
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     for entry in std::fs::read_dir(dir)
         .map_err(|e| Error::new("io", format!("cannot read {}: {e}", dir.display())))?
@@ -844,5 +1022,72 @@ mod tests {
         let tree = Tree::new("conflict", &["a/x.yml", "b/x.yml"]);
         let err = tree.inventory(false).discover_targets().unwrap_err();
         assert_eq!(err.diagnostic().code, "inventory::conflicting_targets");
+    }
+
+    /// An inventory from `(path, content)` pairs, with wildcards on.
+    fn wild(label: &str, files: &[(&str, &str)]) -> (Tree, Inventory) {
+        let tree = Tree::new(label, &[]);
+        for (f, text) in files {
+            let path = tree.0.join(f);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let mut cfg = InventoryConfig::new(&tree.0);
+        cfg.class_wildcards = true;
+        let inv = Inventory::new(cfg, Arc::new(Registry::with_builtins()));
+        (tree, inv)
+    }
+
+    #[test]
+    fn fnmatch_follows_pythons_fnmatchcase() {
+        for (p, n, want) in [
+            ("comp.*", "comp.a.b", true),
+            ("comp.*", "comp", false),
+            ("c?mp", "comp", true),
+            ("[a-c]x", "bx", true),
+            ("[!a-c]x", "bx", false),
+            ("[]]", "]", true),
+            ("[z-a]", "z", false),
+            ("a[", "a[", true),
+            ("**", "", true),
+            ("*.b", "a.B", false),
+        ] {
+            assert_eq!(fnmatch(p, n), want, "{p} ~ {n}");
+        }
+    }
+
+    #[test]
+    fn wildcards_follow_the_reference() {
+        let (_tree, inv) = wild(
+            "wild",
+            &[
+                ("classes/init.yml", ""),
+                ("classes/x[1].yml", ""),
+                ("targets/t.yml", "classes: [\"i*\", \"x[1]\"]\n"),
+                ("targets/miss.yml", "classes: [\"nope.*\"]\n"),
+                ("targets/ok.yml", "classes: [init]\n"),
+            ],
+        );
+        let t = inv.render_named("t").unwrap();
+        assert_eq!(
+            t.classes,
+            ["init", "x[1]"],
+            "root init.yml is `init`; an existing name is literal"
+        );
+        let report = inv.render_all().unwrap();
+        assert!(
+            report.targets.contains_key("ok"),
+            "only the target using the pattern fails"
+        );
+        assert_eq!(report.errors.len(), 1);
+        assert_eq!(
+            report.errors[0].diagnostic().code,
+            "inventory::class_not_found"
+        );
+
+        let mut cfg = inv.cfg.clone();
+        cfg.ignore_class_not_found = true;
+        let inv = Inventory::new(cfg, Arc::new(Registry::with_builtins()));
+        assert!(inv.render_named("miss").unwrap().classes.is_empty());
     }
 }
