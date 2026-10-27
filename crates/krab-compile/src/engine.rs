@@ -16,7 +16,7 @@ use crate::fetch::{self, FetchOptions, FetchOutcome};
 use crate::inputs::Reads;
 use crate::inputs::kadet::kadet_runner_digest;
 use crate::manifest::{ItemRecord, MANIFEST_FILE, MANIFEST_VERSION, Manifest, TargetRecord};
-use crate::native::{ItemContext, NativeCompiler, NativeOptions};
+use crate::native::{ItemContext, NativeCompiler, NativeOptions, global_digest};
 use crate::plan::TargetPlan;
 use crate::python::{PythonCmd, PythonNeeds, PythonProbe, materialize_runner, runner_digest};
 use crate::worker::{Worker, WorkerError};
@@ -76,13 +76,25 @@ impl CompileOptions {
         self.compiled_dir().join(MANIFEST_FILE)
     }
 
+    /// The CMP-31 settings, paths relative to the repository: a moved
+    /// checkout or another Python deadline keeps the records (CMP-31a).
     fn config_digest(&self) -> String {
+        let rel = |p: &Path| p.strip_prefix(&self.repo_root).unwrap_or(p).to_path_buf();
+        let n = &self.native;
         let repr = json!({
-            "search_paths": self.search_paths,
+            "search_paths": self.search_paths.iter().map(|p| rel(p)).collect::<Vec<_>>(),
             "flags": self.flags,
-            "output_path": self.output_path,
+            "output_path": rel(&self.output_path),
             "backend": format!("{:?}", self.backend),
-            "native": format!("{:?}", self.native),
+            "native": {
+                "refs_path": rel(&n.refs_path),
+                "embed_refs": n.embed_refs,
+                "reveal": n.reveal,
+                "indent": n.indent,
+                "rapidyaml": n.use_rapidyaml,
+                "null_as_empty": n.null_as_empty,
+                "multiline": format!("{:?}", n.multiline),
+            },
         });
         digest_str(&repr.to_string())
     }
@@ -866,12 +878,8 @@ fn install_and_record(
     if reads.globals.iter().any(|g| g == "*") {
         globals.insert("*".to_string(), ctx.everything_digest.to_string());
     } else {
-        for g in &reads.globals {
-            if g != &plan.name
-                && let Some(d) = ctx.all_digests.get(g)
-            {
-                globals.insert(g.to_string(), d.clone());
-            }
+        for g in reads.globals.iter().filter(|g| *g != &plan.name) {
+            globals.insert(g.to_string(), global_digest(ctx.all_digests, g).to_string());
         }
     }
     let record = TargetRecord {
@@ -940,7 +948,7 @@ fn why_stale(
                         .into(),
                 );
             }
-        } else if all_digests.get(name) != Some(d) {
+        } else if global_digest(all_digests, name) != d {
             return Some(format!(
                 "inventory of target {name} changed (read by this target)"
             ));
