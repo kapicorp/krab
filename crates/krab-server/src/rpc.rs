@@ -1,6 +1,7 @@
 //! The socket server: accepts connections, dispatches JSON-RPC requests.
 
 use std::io::{BufRead, BufReader, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -34,7 +35,7 @@ impl Server {
     /// holds it. Dead sockets other builds left for this inventory go too.
     pub fn bind(&self) -> std::io::Result<UnixListener> {
         if let Some(parent) = self.cfg.socket.parent() {
-            std::fs::create_dir_all(parent)?;
+            crate::paths::ensure_private_dir(parent)?;
         }
         if self.cfg.socket.exists() {
             if socket_alive(&self.cfg.socket) {
@@ -49,6 +50,9 @@ impl Server {
             let _ = std::fs::remove_file(dead);
         }
         let listener = UnixListener::bind(&self.cfg.socket)?;
+        // bind() applies the umask; the directory already keeps others out,
+        // this keeps the socket private where it is not (SRV-14).
+        std::fs::set_permissions(&self.cfg.socket, std::fs::Permissions::from_mode(0o600))?;
         listener.set_nonblocking(true)?;
         tracing::info!(socket = %self.cfg.socket.display(), "listening");
         Ok(listener)
