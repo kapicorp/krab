@@ -41,6 +41,9 @@ pub struct Inner {
     pub aliases: HashMap<PathBuf, BTreeSet<PathBuf>>,
     pub generation: u64,
     pub history: VecDeque<ChangeSummary>,
+    /// Why the targets could not be listed (two files with one name, no
+    /// `targets/`): every inventory request returns it (SRV-48).
+    pub discovery_error: Option<Diagnostic>,
 }
 
 fn now_ms() -> u64 {
@@ -109,18 +112,41 @@ impl State {
 
     /// Directories outside the inventory that hold real files behind symlinks.
     pub fn alias_dirs(&self) -> BTreeSet<PathBuf> {
-        self.inner
-            .read()
+        let inner = self.inner.read();
+        // Symlink targets, and indexed paths such as a file `from_file` read.
+        inner
             .aliases
             .keys()
+            .chain(inner.index.keys())
             .filter_map(|p| p.parent().map(Path::to_path_buf))
             .collect()
+    }
+
+    /// A path some target was rendered from, probed or read.
+    pub fn is_indexed(&self, path: &Path) -> bool {
+        self.inner.read().index.contains_key(path)
+    }
+
+    /// The targets on disk; on failure the previous ones, with the error kept
+    /// for the requests that would otherwise answer from an empty inventory.
+    fn discover(&self) -> Vec<TargetSpec> {
+        match self.inv.discover_targets() {
+            Ok(specs) => {
+                self.inner.write().discovery_error = None;
+                specs
+            }
+            Err(e) => {
+                let mut inner = self.inner.write();
+                inner.discovery_error = Some(e.into_diagnostic());
+                inner.specs.clone()
+            }
+        }
     }
 
     /// Render every target from scratch.
     pub fn render_all(&self) -> ChangeSummary {
         self.inv.invalidate_all();
-        let specs = self.inv.discover_targets().unwrap_or_default();
+        let specs = self.discover();
         let all: BTreeSet<String> = specs.iter().map(|s| s.name.clone()).collect();
         self.rerender(Vec::new(), specs, all)
     }
@@ -139,7 +165,7 @@ impl State {
         for dir in changed.iter().filter(|p| !p.is_file()) {
             self.inv.invalidate_under(dir);
         }
-        let specs = self.inv.discover_targets().unwrap_or_default();
+        let specs = self.discover();
         let mut affected: BTreeSet<String> = BTreeSet::new();
         {
             let inner = self.inner.read();

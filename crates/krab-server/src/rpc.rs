@@ -144,6 +144,17 @@ impl Server {
     }
 
     fn dispatch(&self, req: &Request) -> Result<Json, RpcError> {
+        // Answering from an inventory that could not be listed would hide the
+        // error that `--no-daemon` reports (SRV-48).
+        if req.method.starts_with("inventory.")
+            && !matches!(
+                req.method.as_str(),
+                "inventory.wait" | "inventory.diagnostics"
+            )
+            && let Some(d) = self.state.read().discovery_error.clone()
+        {
+            return Err(inventory_error(d));
+        }
         match req.method.as_str() {
             "server.info" => Ok(serde_json::to_value(self.info()).unwrap()),
             "server.shutdown" => {
@@ -313,7 +324,12 @@ impl Server {
                     .collect();
                 Ok(serde_json::to_value(DiagnosticsResult {
                     generation: inner.generation,
-                    errors: inner.errors.values().cloned().collect(),
+                    errors: inner
+                        .discovery_error
+                        .iter()
+                        .chain(inner.errors.values())
+                        .cloned()
+                        .collect(),
                     warnings,
                 })
                 .unwrap())
