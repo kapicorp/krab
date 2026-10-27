@@ -528,6 +528,11 @@ mod tests {
     use crate::refs::{RefController, TargetSecrets, b64_decode};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
+    use std::sync::Mutex;
+
+    /// Tests that set VAULT_TOKEN hold this: the variable is process-wide and
+    /// one test sets a wrong token on purpose.
+    static VAULT_TOKEN_ENV: Mutex<()> = Mutex::new(());
 
     /// A tiny Vault look-alike: token auth, KV v2 under `secret/`, a
     /// `transit/` engine whose ciphertext is the base64 plaintext reversed.
@@ -647,8 +652,9 @@ mod tests {
 
     #[test]
     fn kv_and_transit_round_trip_against_a_mock_server() {
+        let _env = VAULT_TOKEN_ENV.lock().unwrap_or_else(|e| e.into_inner());
         let addr = mock_vault("s.token");
-        // SAFETY: the test process sets this once, before any client connects.
+        // SAFETY: the tests that set it hold VAULT_TOKEN_ENV.
         unsafe { std::env::set_var("VAULT_TOKEN", "s.token") };
         let dir = crate::refs::tests::temp_refs("vault");
         let rc = RefController::new(dir.clone(), false);
@@ -708,7 +714,7 @@ mod tests {
         assert_eq!(revealed.len(), 6);
         assert!(revealed.chars().all(|c| c.is_ascii_digit()));
         // Wrong token: authentication error.
-        // SAFETY: the test process sets this once, before any client connects.
+        // SAFETY: the tests that set it hold VAULT_TOKEN_ENV.
         unsafe { std::env::set_var("VAULT_TOKEN", "bad") };
         let rc2 = RefController::new(dir.clone(), false);
         let err = rc2.reveal_str(&out, &mut reads).unwrap_err().0;
@@ -804,9 +810,9 @@ xQZIUmvj2F3GgmMg0Jaz4TzO+wQYbCFn/kuxqTMTeVPfrFFvUq8kmnu7
     /// `skip_verify: true` connects unverified without a warning (#216).
     #[test]
     fn tls_is_verified_unless_skip_verify_is_explicit() {
+        let _env = VAULT_TOKEN_ENV.lock().unwrap_or_else(|e| e.into_inner());
         let addr = mock_https_vault();
-        // SAFETY: every test that sets it sets a non-empty token, and this
-        // server accepts any.
+        // SAFETY: the tests that set it hold VAULT_TOKEN_ENV.
         unsafe { std::env::set_var("VAULT_TOKEN", "s.token") };
         let raw = json!({"auth": "token", "addr": addr});
         let params = normalize_params(Some(&raw), RefType::VaultKv);
