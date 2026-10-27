@@ -59,7 +59,9 @@ they count for less than a test. A requirement without any check says
 `Test: none`, which is a gap worth closing, not a reason to drop the
 requirement. `Since:` names the pull request or commit that introduced the
 behaviour. A requirement that `main` does not meet yet says
-`Since: not met yet (#issue)` and has a row under Open deviations.
+`Since: not met yet (#issue)` and has a row under Open deviations. The pull
+request that closes that issue updates the requirement and removes the row;
+CI fails it otherwise (CLI-63).
 
 **Acceptance criteria** describe the scenarios that matter end to end, in
 Given/When/Then form. Each criterion names the requirements it covers and the
