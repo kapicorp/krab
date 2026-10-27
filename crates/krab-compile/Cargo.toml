@@ -12,7 +12,6 @@ publish.workspace = true
 krab-inventory = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 blake3 = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }

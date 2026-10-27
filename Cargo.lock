@@ -914,7 +914,6 @@ dependencies = [
  "libc",
  "miette",
  "parking_lot",
- "serde",
  "serde_json",
  "tracing",
  "tracing-logfmt",
@@ -943,7 +942,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tar",
- "thiserror",
  "tracing",
  "ureq",
  "zip",
@@ -962,7 +960,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "thiserror",
  "tracing",
 ]
 
@@ -979,7 +976,6 @@ dependencies = [
  "saphyr-parser",
  "serde",
  "serde_json",
- "tracing",
  "url",
 ]
 
@@ -995,7 +991,6 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
- "thiserror",
  "tracing",
 ]
 
