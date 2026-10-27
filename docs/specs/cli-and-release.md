@@ -385,7 +385,7 @@ CLI-48 rust-toolchain.toml MUST pin the toolchain (channel 1.98.1) with the
        runner's rustup reading this file, with no toolchain action, so no
        action pin has to follow a moving branch.
        Test: none
-       Since: #101, #258
+       Since: #101, #205
 
 CLI-49 rust-version in [workspace.package] MUST name the oldest toolchain the
        workspace builds on (1.90) and MUST NOT be repeated in prose.
@@ -430,14 +430,14 @@ CLI-60 Every registered resolver SHOULD be documented under docs/, with
 CLI-54 The release MUST publish a `krab` wheel to PyPI, built with maturin
        `bindings = "bin"` and uploaded by trusted publishing, from which
        `python -m krab` runs the binary.
-       Test: none
-       Since: not met yet (#226)
+       Test: release.yml: pypi (partial: not run by a release yet)
+       Since: #246
 
 CLI-55 The Linux release binaries MUST need at most glibc 2.17, the release
        job MUST fail when a binary needs a newer symbol version, and
        README.md MUST state the floor.
-       Test: none
-       Since: not met yet (#225)
+       Test: release.yml: binary, step "Needs at most glibc" (partial: not run by a release yet)
+       Since: #245
 
 CLI-57 docs/ARCHITECTURE.md MUST name in its code map every file an
        extension goes through, and MUST list, for each kind of extension
@@ -470,8 +470,8 @@ CLI-61 Each log line on stderr MUST be logfmt by default (`ts`, `level`,
        with a warning.
        A daemon started by the CLI MUST use the format of the environment
        it inherits.
-       Test: none
-       Since: not met yet (#247)
+       Test: crates/krab/tests/log_format.rs::logs_are_logfmt_by_default_and_json_on_request, crates/krab/tests/log_format.rs::an_unknown_format_falls_back_to_logfmt_with_a_warning, crates/krab/tests/log_format.rs::an_empty_format_is_the_default_without_a_warning (partial: a daemon inheriting the format is not tested)
+       Since: #248
 ```
 
 ## Acceptance criteria
@@ -570,7 +570,9 @@ CLI-EC-11 Unknown or empty log format. KRAB_LOG_FORMAT=yaml logs a logfmt
 warning naming the value (`value=yaml`) and continues in logfmt; an empty
 value is the default without a warning (CLI-61). Test:
 crates/krab/tests/log_format.rs::an_unknown_format_falls_back_to_logfmt_with_a_warning
-covers the unknown value; the empty value: none.
+covers the unknown value, and
+crates/krab/tests/log_format.rs::an_empty_format_is_the_default_without_a_warning
+the empty value.
 
 CLI-EC-12 Daemon started by the CLI. The daemon inherits KRAB_LOG_FORMAT from
 the process that spawns it, so its log file uses that format; a daemon
@@ -662,7 +664,6 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
-| CLI-61 | #247 | Log lines use tracing-subscriber's human format: the timestamp, level and target are not key/value pairs, values are unquoted, and there is no JSON option |
 | CLI-7, CLI-8, CLI-10, CLI-11 | #41 | There is no `--help-json` (clap rejects it with exit status 2). Exit status distinguishes only success (0), any failure (1) and an argument error (2). Under `--json` diagnostics go to stdout, and non-diagnostic errors and configuration warnings stay plain text on stderr. |
 | CLI-60 | #140 | The registered resolvers are documented only by name in DESIGN.md and in the specs' resolver table |
 | CLI-21 | #141 | The reference version 0.36.3 also appears in Rust sources (`crates/krab-inventory/tests/fixture.rs`, `crates/krab-compile/src/refs/mod.rs`, two tests in `crates/krab/tests`) and in `ci.yml`, outside the markdown-only check, and README.md lines 201 to 202 wrap between "kapitan" and "0.36.3", so the line-based scan misses it. The check compares copies with each other, not with a source. Stale `kapitan` names remain: `crates/krab-inventory/src/python.rs:142` documents `~/.cache/kapitan` where the code uses `krab`, and `crates/krab-compile/src/pyenv.rs:16` documents `$XDG_CACHE_HOME/kapitan/python/<digest>`. |
@@ -670,6 +671,4 @@ Branch rules that gate on CI name the single check `CI passed` (CLI-33).
 | CLI-33 | #171 | The ruleset for `main` has enforcement disabled and there is no classic branch protection, so no check, `CI passed` included, is required before a merge. Needs an admin action. |
 | CLI-52 | #172 | The crate name `krab` on crates.io belongs to an unrelated project. Needs a decision on the published name, if any. |
 | CLI-52 | #43 | The crates are not published (`publish = false`), so there is no library release. |
-| CLI-54 | #226 | No wheel is published; krab ships as release archives only |
-| CLI-55 | #225 | The Linux binaries are built on ubuntu-22.04 (CLI-41) and need `GLIBC_2.34`; README.md says 2.35 |
 | CLI-41 | #44 | No Homebrew formula and no `cargo binstall` metadata; release archives are the only install path. |

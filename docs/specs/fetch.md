@@ -280,8 +280,8 @@ FET-31 A `git` fetch SHOULD NOT transfer the repository's full history
 
 FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
        unforced copy does, and MUST report the skipped names once.
-       Test: none
-       Since: not met yet (#217)
+       Test: crates/krab-compile/src/fetch.rs::forced_git_copy_skips_dot_entries
+       Since: #239
 ```
 
 ## Acceptance criteria
@@ -364,4 +364,3 @@ FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
 | FET-29 | #145 | `download` (`fetch.rs:523`) and `Registry::new` (`oci.rs:254`) set only `timeout_connect(30s)`; bodies are read with `.limit(u64::MAX)` (`fetch.rs:543`, `oci.rs:294`); `unpack_file` and `tar_bytes` hold whole archives in memory. |
 | FET-30 | #146 | `safe_copy_tree` and `copy_tree` (`fetch.rs:1009-1047`) use `is_dir` and `std::fs::copy`, which follow links, so a link entry in an archive, repository or artifact copies the target's contents (or a whole directory) into the destination. |
 | FET-31 | #64 | `fetch_git` runs a full `git clone` per run. |
-| FET-32 | #217 | A forced copy copies dot entries too (`fetch.rs:505-508,1019-1021`): a `type: git` dependency without `subdir` leaves `.git` in the dependency path, which `git add` then treats as an embedded repository. |
