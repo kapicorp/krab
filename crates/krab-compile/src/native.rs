@@ -317,8 +317,11 @@ impl NativeCompiler {
                 }
             }
             "remove" => {
-                for input in inputs {
-                    remove::compile(&input)?;
+                // Only the target's own build tree (OUT-25a): a match under the
+                // repository is installed output, which kapitan's closing copy
+                // of compiled/ would restore and krab's per-target install does not.
+                for input in inputs.iter().filter(|p| p.starts_with(temp_dir)) {
+                    remove::compile(input)?;
                 }
             }
             "external" => {
