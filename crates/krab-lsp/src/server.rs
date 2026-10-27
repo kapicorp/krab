@@ -584,23 +584,19 @@ fn publish_diagnostics(
         .into_iter()
         .map(|t| (t.name, t.file))
         .collect();
-    let mut by_uri: HashMap<Url, Vec<lsp_types::Diagnostic>> = HashMap::new();
-    for (d, severity) in result
-        .errors
-        .iter()
-        .map(|d| (d, DiagnosticSeverity::ERROR))
-        .chain(
-            result
-                .warnings
-                .iter()
-                .map(|d| (d, DiagnosticSeverity::WARNING)),
-        )
-    {
-        let Some((uri, diag)) = to_lsp_diagnostic(d, severity, &target_files, st) else {
-            continue;
-        };
-        by_uri.entry(uri).or_default().push(diag);
-    }
+    let mut by_uri = group_by_uri(
+        result
+            .errors
+            .iter()
+            .map(|d| (d, DiagnosticSeverity::ERROR))
+            .chain(
+                result
+                    .warnings
+                    .iter()
+                    .map(|d| (d, DiagnosticSeverity::WARNING)),
+            )
+            .filter_map(|(d, severity)| to_lsp_diagnostic(d, severity, &target_files, st)),
+    );
     let mut prev = published.lock();
     for uri in prev.iter() {
         by_uri.entry(uri.clone()).or_default();
@@ -621,6 +617,16 @@ fn publish_diagnostics(
             params,
         )));
     }
+}
+
+fn group_by_uri(
+    diags: impl Iterator<Item = (Url, lsp_types::Diagnostic)>,
+) -> HashMap<Url, Vec<lsp_types::Diagnostic>> {
+    let mut by_uri: HashMap<Url, Vec<lsp_types::Diagnostic>> = HashMap::new();
+    for (uri, diag) in diags {
+        by_uri.entry(uri).or_default().push(diag);
+    }
+    by_uri
 }
 
 fn to_lsp_diagnostic(
@@ -712,4 +718,41 @@ fn rel(p: &Path, root: &Path) -> String {
 
 fn rel_loc(l: &KLocation, root: &Path) -> String {
     format!("{}:{}:{}", rel(&l.file, root), l.line, l.col)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_diagnostic_per_location_and_message() {
+        let uri = Url::parse("file:///inv/classes/common.yml").unwrap();
+        let diag = |target: &str| {
+            (
+                uri.clone(),
+                lsp_types::Diagnostic {
+                    range: Range::new(Position::new(2, 3), Position::new(2, 20)),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(NumberOrString::String("E1".into())),
+                    source: Some(format!("krab ({target})")),
+                    message: "interpolation failed".into(),
+                    ..Default::default()
+                },
+            )
+        };
+        let other = (
+            uri.clone(),
+            lsp_types::Diagnostic {
+                message: "another error".into(),
+                ..diag("a").1
+            },
+        );
+        let by_uri = group_by_uri([diag("a"), diag("b"), other, diag("c")].into_iter());
+        let got = &by_uri[&uri];
+        assert_eq!(got.len(), 2, "{got:#?}");
+        assert_eq!(got[0].message, "interpolation failed");
+        assert_eq!(got[0].source.as_deref(), Some("krab (a, b, c)"));
+        assert_eq!(got[1].message, "another error");
+        assert_eq!(got[1].source.as_deref(), Some("krab (a)"));
+    }
 }
