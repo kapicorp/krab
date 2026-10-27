@@ -217,10 +217,25 @@ pub fn materialize_script(name: &str, source: &str) -> std::io::Result<PathBuf> 
         .join(&script_digest(source)[..16]);
     std::fs::create_dir_all(&base)?;
     let path = base.join(name);
-    if !path.exists() {
-        std::fs::write(&path, source)?;
-    }
+    write_if_changed(&path, source)?;
     Ok(path)
+}
+
+/// Write `source` to `path` unless it already holds exactly that. The bytes
+/// go to a temporary file in the same directory that is renamed into place,
+/// so a write cut short or a concurrent first run never leaves a partial file.
+pub fn write_if_changed(path: &Path, source: &str) -> std::io::Result<()> {
+    if std::fs::read(path).is_ok_and(|b| b == source.as_bytes()) {
+        return Ok(());
+    }
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(format!(".{}.{seq}.tmp", std::process::id()));
+    std::fs::write(&tmp, source)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 pub fn script_digest(source: &str) -> String {
