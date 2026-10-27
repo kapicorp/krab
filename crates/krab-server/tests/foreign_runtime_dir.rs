@@ -7,7 +7,10 @@ use krab_server::Connector;
 
 #[test]
 fn the_client_refuses_a_runtime_directory_that_is_not_its_own() {
-    let base = std::env::temp_dir().join(format!("krab-foreign-test-{}", std::process::id()));
+    // Not temp_dir(): on macOS that path is long enough that the socket
+    // path would exceed the unix socket limit and krab would fall back to
+    // /tmp/krab-<uid> (SRV-15), which is not the directory under test.
+    let base = std::path::PathBuf::from(format!("/tmp/krab-ft-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let elsewhere = base.join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
@@ -24,6 +27,12 @@ fn the_client_refuses_a_runtime_directory_that_is_not_its_own() {
         version: "test".into(),
         idle_timeout: Duration::from_secs(1),
     };
+
+    assert!(
+        connector.socket().starts_with(base.join("krab")),
+        "the socket is not in the directory under test: {}",
+        connector.socket().display()
+    );
 
     let start = Instant::now();
     let err = connector.connect_or_spawn().err().expect("must refuse");
