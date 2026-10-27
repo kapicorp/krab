@@ -430,13 +430,13 @@ CLI-60 Every registered resolver SHOULD be documented under docs/, with
 CLI-54 The release MUST publish a `krab` wheel to PyPI, built with maturin
        `bindings = "bin"` and uploaded by trusted publishing, from which
        `python -m krab` runs the binary.
-       Test: release.yml: pypi (partial: not run by a release yet)
+       Test: release.yml: pypi (partial: the v2.0.0-alpha.6 run built the wheels, but PyPI refused the upload because no trusted publisher is registered for kapicorp/krab)
        Since: #246
 
 CLI-55 The Linux release binaries MUST need at most glibc 2.17, the release
        job MUST fail when a binary needs a newer symbol version, and
        README.md MUST state the floor.
-       Test: release.yml: binary, step "Needs at most glibc" (partial: not run by a release yet)
+       Test: release.yml: binary, step "Needs at most glibc" (passed in the v2.0.0-alpha.6 release run)
        Since: #245
 
 CLI-57 docs/ARCHITECTURE.md MUST name in its code map every file an
