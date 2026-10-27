@@ -261,6 +261,12 @@ RES-70 `from_file` MUST warn, naming the path, when the path lies outside
        reads the file; a later release refuses it (D25).
        Test: crates/krab-inventory/src/resolvers/builtin.rs::from_file_warns_on_a_path_outside_the_working_directory
        Since: #274
+
+RES-71 `oc.env` MUST warn, naming the variable, when the variable is not
+       listed in `.kapitan` `inventory.env`. It still reads the variable; a
+       later release refuses unlisted ones (D27).
+       Test: crates/krab-inventory/src/resolvers/oc.rs::oc_env_warns_on_a_variable_not_in_inventory_env, crates/krab-inventory/src/dotkapitan.rs::krab_keys_are_not_reported_and_env_is_read
+       Since: #276
 ```
 
 ### The write resolver

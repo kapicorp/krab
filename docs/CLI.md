@@ -313,6 +313,7 @@ says whether kapitan reads it:
 | `yaml-multiline-string-style` | `compile` | multiline string style for compiled YAML (default `literal`) |
 | `yaml-use-rapidyaml`, `yaml-dump-null-as-empty` | `compile` | write compiled YAML as kapitan's rapidyaml writer does; write null values as empty (both default `false`) |
 | `python-resolvers` | `inventory` | the `resolvers.py` to run and the Python to run it with ([README](../README.md#python-resolvers)) |
+| `env` | `inventory` | the environment variables `${oc.env:...}` may read; reading any other one warns, and a later release refuses it (krab only) |
 
 ## JSON output
 
