@@ -624,7 +624,28 @@ fn group_by_uri(
 ) -> HashMap<Url, Vec<lsp_types::Diagnostic>> {
     let mut by_uri: HashMap<Url, Vec<lsp_types::Diagnostic>> = HashMap::new();
     for (uri, diag) in diags {
-        by_uri.entry(uri).or_default().push(diag);
+        let list = by_uri.entry(uri).or_default();
+        // Every target that includes a broken class reports the same error there.
+        let same = list
+            .iter_mut()
+            .find(|d| d.range == diag.range && d.code == diag.code && d.message == diag.message);
+        match same {
+            Some(d) => {
+                // "krab (a)" + "krab (b)" -> "krab (a, b)"
+                let target = diag
+                    .source
+                    .as_deref()
+                    .and_then(|s| s.strip_prefix("krab ("));
+                if let (Some(src), Some(t)) = (d.source.as_mut(), target)
+                    && src.ends_with(')')
+                {
+                    src.pop();
+                    src.push_str(", ");
+                    src.push_str(t);
+                }
+            }
+            None => list.push(diag),
+        }
     }
     by_uri
 }
