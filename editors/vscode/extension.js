@@ -42,11 +42,18 @@ async function startClient(root) {
   };
   const client = new LanguageClient("krab", "krab", serverOptions, clientOptions);
   clients.set(root, client);
-  await client.start();
+  try {
+    await client.start();
+  } catch (err) {
+    // Forget it, or restart would skip this root forever.
+    clients.delete(root);
+    throw err;
+  }
 }
 
 async function stopAll() {
-  for (const client of clients.values()) await client.stop();
+  // stop() throws on a client that is not running.
+  for (const client of clients.values()) await client.stop().catch(() => {});
   clients.clear();
 }
 
