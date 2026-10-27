@@ -158,11 +158,18 @@ const KRAB_KEYS: &[(&str, &[&str])] = &[
             "yaml-use-rapidyaml",
             "yaml-dump-null-as-empty",
             "ignore-version-check",
+            "python-timeout",
         ],
     ),
     (
         "inventory",
-        &["inventory-path", "indent", "python-resolvers"],
+        &[
+            "inventory-path",
+            "indent",
+            "python-resolvers",
+            "contrib-resolvers",
+            "env",
+        ],
     ),
     ("refs", &["refs-path"]),
 ];
@@ -265,6 +272,8 @@ pub struct DotKapitan {
     /// `inventory.contrib-resolvers: true` silences the krab extension
     /// warning for the `contrib` resolvers.
     pub contrib_resolvers: bool,
+    /// `inventory.env`: the variables `oc.env` reads without a warning (RES-71).
+    pub env: Vec<String>,
     pub file: Option<PathBuf>,
     /// The raw `compile:` section, keys as written (`search-paths`, `output-path`, ...).
     pub compile: Map,
@@ -368,6 +377,12 @@ impl DotKapitan {
             get(&["inventory"], "contrib-resolvers"),
             Some(Value::Bool(true))
         );
+        if let Some(names) = cfg.inventory.get("env").and_then(Node::as_list) {
+            cfg.env = names
+                .iter()
+                .filter_map(|n| n.as_str().map(String::from))
+                .collect();
+        }
         if let Some(n) = cfg.inventory.get("python-resolvers") {
             cfg.python_resolvers = PythonResolverSettings::from_node(n);
         }
@@ -584,6 +599,23 @@ mod tests {
             ]
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Keys krab reads are not reported as unknown, and `inventory.env` is
+    /// the list `oc.env` may read without a warning (RES-71).
+    #[test]
+    fn krab_keys_are_not_reported_and_env_is_read() {
+        let dir = std::env::temp_dir().join(format!("dotkapitan-env-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".kapitan"),
+            "compile:\n  python-timeout: 900\ninventory:\n  contrib-resolvers: true\n  env:\n    - HOME\n    - CLUSTER\n",
+        )
+        .unwrap();
+        let dot = DotKapitan::load(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(dot.key_warnings.is_empty(), "{:?}", dot.key_warnings);
+        assert_eq!(dot.env, ["HOME", "CLUSTER"]);
     }
 
     #[test]
