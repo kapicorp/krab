@@ -355,7 +355,6 @@ impl NativeCompiler {
                 ));
             }
         }
-        let _ = compile_root;
         Ok(())
     }
 }
