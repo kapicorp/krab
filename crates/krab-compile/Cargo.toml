@@ -29,7 +29,7 @@ tar = "0.4.46"
 zip = { version = "7", default-features = false, features = ["deflate"] }
 rand = "0.8"
 rsa = "0.9"
-ed25519-dalek = { version = "2", features = ["rand_core", "pkcs8", "pem"] }
+ed25519-dalek = { version = "3", features = ["rand_core", "pkcs8", "pem"] }
 
 [lints]
 workspace = true
