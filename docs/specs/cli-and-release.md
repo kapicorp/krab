@@ -4,6 +4,7 @@
 Status: As-built
 Verified against: main @ a4fb9c4
 Code: crates/krab/src/main.rs, crates/krab/src/app.rs, crates/krab/src/report.rs,
+      crates/krab/src/cmd_inventory.rs,
       crates/krab/src/completions.rs, crates/krab/src/explain.rs,
       crates/krab/tests/{cli_docs,docs_consistency,readme_version,completions,explain_missing}.rs,
       .github/, Cargo.toml, deny.toml, rust-toolchain.toml, cliff.toml, lychee.toml
@@ -156,6 +157,23 @@ CLI-16 A path with no value MUST fail with the diagnostic
        inventory::path_not_found and exit status 1.
        Test: none
        Since: 319ca84
+```
+
+### inventory and inventory watch
+
+```text
+CLI-65 With --json, krab inventory without a subcommand MUST print the
+       selected document as JSON, as --format json does.
+       Test: crates/krab/tests/inventory_json.rs::json_flag_prints_the_target_document_as_json
+       Since: #281
+
+CLI-66 krab inventory watch MUST keep running when its daemon goes away, as
+       the daemon does after a configuration source changes (SRV-37). It
+       reconnects, starting a daemon when none answers, and reports the
+       changes the new daemon renders. It MUST exit with status 1 only when
+       that reconnect fails.
+       Test: crates/krab/tests/watch_restart.rs::watch_survives_a_daemon_restart
+       Since: #281
 ```
 
 ### Shell completions
