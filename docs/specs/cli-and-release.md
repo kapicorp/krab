@@ -171,7 +171,7 @@ CLI-66 krab inventory watch MUST keep running when its daemon goes away, as
        the daemon does after a configuration source changes (SRV-37). It
        reconnects, starting a daemon when none answers, and reports the
        changes the new daemon renders. It MUST exit with status 1 only when
-       that reconnect fails.
+       it cannot reconnect.
        Test: crates/krab/tests/watch_restart.rs::watch_survives_a_daemon_restart
        Since: #281
 ```
