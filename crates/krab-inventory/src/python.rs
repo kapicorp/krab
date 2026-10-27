@@ -422,6 +422,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_truncated_runner_script_is_rewritten() {
+        // A source of its own, so its cache directory is this test's alone.
+        let source = format!(
+            "# a_truncated_runner_script_is_rewritten {}\n",
+            std::process::id()
+        );
+        let path = materialize_script("runner.py", &source).unwrap();
+        std::fs::write(&path, &source[..5]).unwrap();
+        let again = materialize_script("runner.py", &source).unwrap();
+        let content = std::fs::read_to_string(&again).unwrap();
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+        assert_eq!(content, source);
+    }
+
+    #[test]
     fn parses_env_prefix_and_args() {
         let c = PythonCmd::parse("PEX_INTERPRETER=1 /usr/local/bin/kapitan -u").unwrap();
         assert_eq!(
