@@ -174,7 +174,7 @@ SRV-19 The protocol MUST be JSON-RPC 2.0 with one JSON document per line in
 SRV-51 A connection MUST be read and written in blocking mode, whatever the
        platform does with the listener's non-blocking flag.
        Test: crates/krab-server/tests/connection.rs::a_connection_is_answered
-       Since: tbd
+       Since: #286
 
        The accept loop polls a non-blocking listener. Linux does not pass that
        flag on to an accepted socket, macOS and the BSDs do, so until this
