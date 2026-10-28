@@ -64,10 +64,15 @@ fn watch_survives_a_daemon_restart() {
     let before = saw_target_change(&mut watch, &lines, &target);
     // The daemon re-renders this batch, answers the wait, then exits.
     std::fs::write(dir.join(".kapitan"), format!("{dot}# changed\n")).unwrap();
+    // A late event for t.yml can come first (FSEvents on macOS), so read on.
+    let deadline = Instant::now() + Duration::from_secs(10);
     let restarted = before
-        && lines
-            .recv_timeout(Duration::from_secs(10))
-            .is_ok_and(|l| l.contains(".kapitan"));
+        && std::iter::from_fn(|| {
+            lines
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .ok()
+        })
+        .any(|l| l.contains(".kapitan"));
     let after = restarted && saw_target_change(&mut watch, &lines, &target);
     let alive = watch.try_wait().unwrap().is_none();
 
