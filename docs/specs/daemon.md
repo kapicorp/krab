@@ -171,6 +171,16 @@ SRV-19 The protocol MUST be JSON-RPC 2.0 with one JSON document per line in
        Test: none
        Since: b3c122e
 
+SRV-51 A connection MUST be read and written in blocking mode, whatever the
+       platform does with the listener's non-blocking flag.
+       Test: crates/krab-server/tests/connection.rs::a_connection_is_answered
+       Since: tbd
+
+       The accept loop polls a non-blocking listener. Linux does not pass that
+       flag on to an accepted socket, macOS and the BSDs do, so until this
+       requirement the daemon dropped every macOS client after accept and the
+       client failed with "Broken pipe".
+
 SRV-20 Errors MUST use these codes: -32700 for a line that is not a request
        (answered with id 0), -32601 for an unknown method, -32602 for
        parameters that do not deserialise, and 1 for inventory failures, whose
