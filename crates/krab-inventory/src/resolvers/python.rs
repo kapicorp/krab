@@ -101,6 +101,14 @@ impl PythonConfig {
     }
 }
 
+/// Content digest of each file, `None` when one cannot be read.
+fn module_digests(modules: &[PathBuf]) -> Option<Vec<String>> {
+    modules
+        .iter()
+        .map(|m| Some(blake3::hash(&std::fs::read(m).ok()?).to_hex().to_string()))
+        .collect()
+}
+
 /// What importing the file produced.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Loaded {
@@ -109,6 +117,9 @@ pub struct Loaded {
     /// Project modules the import loaded (not the standard library or
     /// installed packages); a change to one of them needs a fresh import.
     pub modules: Vec<PathBuf>,
+    /// Content digest of each of `modules` at import time, in the same order.
+    #[serde(default)]
+    pub module_digests: Vec<String>,
     /// Version of the omegaconf package in the worker, `None` when the
     /// worker's stand-in module is used.
     pub omegaconf: Option<String>,
@@ -221,8 +232,8 @@ impl PythonResolvers {
     fn cached(&self) -> Option<Loaded> {
         let text = std::fs::read_to_string(self.cache_path()?).ok()?;
         let loaded: Loaded = serde_json::from_str(&text).ok()?;
-        // A module that vanished means the import would go differently.
-        loaded.modules.iter().all(|m| m.is_file()).then_some(loaded)
+        // A module that vanished or changed means the import would go differently.
+        (loaded.module_digests == module_digests(&loaded.modules)?).then_some(loaded)
     }
 
     fn remember(&self, loaded: &Loaded) {
@@ -261,12 +272,14 @@ impl PythonResolvers {
                     .collect()
             })
             .unwrap_or_default();
+        let modules: Vec<PathBuf> = strings(info.get("modules"))
+            .into_iter()
+            .map(PathBuf::from)
+            .collect();
         Loaded {
             resolvers,
-            modules: strings(info.get("modules"))
-                .into_iter()
-                .map(PathBuf::from)
-                .collect(),
+            module_digests: module_digests(&modules).unwrap_or_default(),
+            modules,
             omegaconf: info
                 .get("omegaconf")
                 .and_then(Json::as_str)

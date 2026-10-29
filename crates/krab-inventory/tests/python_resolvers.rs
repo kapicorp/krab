@@ -211,6 +211,48 @@ fn prefer_native_keeps_the_rust_resolver() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The resolver cache is keyed by `resolvers.py` alone, so a resolver added
+/// to a module it imports must still be seen by the next process (RES-74).
+#[test]
+fn a_changed_imported_module_invalidates_the_cache() {
+    if !python_has(&[], "sys") {
+        skip("python3 not available");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("krab-module-cache-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // A fresh cache key per run, so an entry from an earlier run cannot answer.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::fs::write(
+        dir.join("resolvers.py"),
+        format!("# {nonce}\nfrom helpers import pass_resolvers\n"),
+    )
+    .unwrap();
+    let helpers = |names: &[&str]| {
+        let entries: Vec<String> = names.iter().map(|n| format!("'{n}': f")).collect();
+        std::fs::write(
+            dir.join("helpers.py"),
+            format!(
+                "def f(x):\n    return x\ndef pass_resolvers():\n    return {{{}}}\n",
+                entries.join(", ")
+            ),
+        )
+        .unwrap();
+    };
+    helpers(&["ra"]);
+    assert!(!registry_with(dir.join("resolvers.py"), "python3", false).contains("rb"));
+    helpers(&["ra", "rb"]);
+    let registry = registry_with(dir.join("resolvers.py"), "python3", false);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        registry.contains("rb"),
+        "the cached entry hid the new resolver"
+    );
+}
+
 /// A Python resolver whose `_root_` lookup evaluates another Python
 /// resolver needs a second worker while holding the first. With a pool of
 /// one that used to wait forever.

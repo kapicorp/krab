@@ -395,6 +395,11 @@ RES-64 The registry MUST record `resolvers.py`, the project modules it
        one changes ([daemon.md](daemon.md)).
        Test: crates/krab-server/tests/restart.rs::a_changed_configuration_source_stops_the_server
        Since: #77, #155
+
+RES-74 A cached entry MUST be ignored when a project module it recorded
+       has changed content since the entry was written.
+       Test: crates/krab-inventory/tests/python_resolvers.rs::a_changed_imported_module_invalidates_the_cache
+       Since: #304
 ```
 
 ### Not met yet

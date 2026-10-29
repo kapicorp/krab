@@ -404,6 +404,14 @@ CMP-53 README.md MUST state the Python versions the runner scripts
        and the newest of them.
        Test: none
        Since: not met yet (#224)
+
+CMP-57 A runner script krab writes to its cache (the kadet evaluator and
+       its package, the Python backend worker, the resolver worker) MUST be
+       written to a temporary file in the same directory and renamed into
+       place. A cached copy whose content differs from the embedded source
+       MUST be rewritten before it is run.
+       Test: crates/krab-inventory/src/python.rs::tests::a_truncated_runner_script_is_rewritten
+       Since: #304
 ```
 
 ### Manifest
