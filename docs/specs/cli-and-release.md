@@ -297,6 +297,12 @@ CLI-65 The vscode job MUST run npm audit --omit=dev and fail on any
        Test: ci.yml: vscode
        Since: #287
 
+CLI-66 The vscode job MUST fail when a dependency that ships in the .vsix
+       declares a licence in package-lock.json that is not on the allow list
+       in deny.toml.
+       Test: ci.yml: vscode
+       Since: #287
+
 CLI-33 The job "CI passed" MUST depend on changes, lint, test, parity, msrv,
        deny, zizmor and vscode, run even when one of them failed, and fail unless
        every result is success or skipped.
@@ -320,12 +326,12 @@ CLI-36 The Rust build cache MUST be saved only from runs on main.
        Test: none
        Since: #107
 
-CLI-37 Dependabot MUST propose cargo and github-actions updates weekly, each
-       with a cooldown of 7 days, commit prefixes "deps:" and "ci:", and the
-       label "area: packaging"; at most 3 cargo pull requests are open at a
-       time.
+CLI-37 Dependabot MUST propose cargo, github-actions and editors/vscode npm
+       updates weekly, each with a cooldown of 7 days, commit prefixes
+       "deps:" and "ci:", and the label "area: packaging"; at most 3 cargo
+       pull requests are open at a time.
        Test: none
-       Since: #96
+       Since: #96, #287 (npm)
 
 CLI-38 .github/workflows/links.yml MUST run lychee with lychee.toml over the
        repository every Monday at 06:00 UTC and on manual dispatch, and fail
