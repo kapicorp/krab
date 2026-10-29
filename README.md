@@ -34,7 +34,7 @@ and Apple silicon), a `SHA256SUMS` file, and the VS Code extension as a
 `.vsix`:
 
 ```sh
-version=2.0.0-alpha.6 target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
+version=2.0.0-alpha.7 target=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin
 curl -LO https://github.com/kapicorp/krab/releases/download/v$version/krab-$version-$target.tar.gz
 tar xzf krab-$version-$target.tar.gz
 install -m 755 krab-$version-$target/krab ~/.local/bin/krab

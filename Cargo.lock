@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "krab"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 dependencies = [
  "clap",
  "clap_complete",
@@ -923,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "krab-compile"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 dependencies = [
  "base64 0.22.1",
  "blake3",
@@ -951,7 +951,7 @@ dependencies = [
 
 [[package]]
 name = "krab-inventory"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 dependencies = [
  "blake3",
  "indexmap",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "krab-lsp"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 dependencies = [
  "crossbeam-channel",
  "krab-inventory",
@@ -985,7 +985,7 @@ dependencies = [
 
 [[package]]
 name = "krab-server"
-version = "2.0.0-alpha.6"
+version = "2.0.0-alpha.7"
 dependencies = [
  "blake3",
  "krab-inventory",
