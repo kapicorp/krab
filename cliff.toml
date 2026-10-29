@@ -40,7 +40,7 @@ commit_parsers = [
     # Security fixes lead the notes whatever their area (CLI-70), as long as
     # the commit message names the advisory ID. Groups sort by name, so the
     # hidden "0" puts this one first; the template strips it.
-    { message = "(CVE|GHSA|RUSTSEC)-[0-9]", group = "<!-- 0 -->Security" },
+    { message = 'CVE-\d{4}-\d+|GHSA(-[0-9a-z]{4}){3}|RUSTSEC-\d{4}-\d{4}', group = "<!-- 0 -->Security" },
 
     { message = "^inventory: ", group = "Inventory" },
     { message = "^server: ", group = "Inventory server" },
