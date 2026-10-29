@@ -227,9 +227,24 @@ OUT-24 copy MUST copy a file into the output directory (or onto the output
 
 OUT-25 remove MUST delete the resolved file or directory tree. A path that
        no longer exists is not an error.
-       Test: none
+       Test: crates/krab/tests/remove_input.rs::remove_deletes_only_in_the_targets_own_build_tree
        Since: 1b9c9c5
 
+OUT-25a remove MUST delete only what lies in the target's own build tree.
+       A match under the repository, such as an installed file in
+       compiled/, MUST be left alone.
+       Test: crates/krab/tests/remove_input.rs::remove_deletes_only_in_the_targets_own_build_tree
+       Since: #298
+```
+
+kapitan deletes every match in every search path, the real
+`compiled/<target>/...` included, and then replaces `compiled/` with its
+temporary tree at the end of a full run, so only the deletion in the
+temporary tree shows. krab installs per target and never replaces
+`compiled/` as a whole, so deleting the live file would remove output of
+another target, or the previous output of a target that then fails (CMP-18).
+
+```text
 OUT-26 external MUST run `sh -c "<input path> <args>"` with
        `${compiled_target_dir}` in the arguments and `env_vars` values
        replaced by the item's output directory. The environment MUST be
