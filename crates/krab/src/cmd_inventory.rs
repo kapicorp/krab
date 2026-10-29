@@ -7,6 +7,7 @@ use krab_inventory::error::Diagnostic;
 use krab_inventory::explain::Explanation;
 use krab_inventory::merge::get;
 use krab_inventory::{ClassUsage, KeyPath, Node, Value};
+use krab_server::ClientError;
 use krab_server::protocol::*;
 
 use crate::app::{App, Failure, Format, flatten};
@@ -252,7 +253,8 @@ fn show(app: &App, args: ShowArgs) -> Result<(), Failure> {
         }
     };
     let doc = if args.flat { flatten(&doc) } else { doc };
-    app.print_value(&doc, args.format, args.indent);
+    let format = if app.json { Format::Json } else { args.format };
+    app.print_value(&doc, format, args.indent);
     Ok(())
 }
 
@@ -543,15 +545,35 @@ fn watch(app: &App) -> Result<(), Failure> {
         }
     }
     loop {
-        let r: WaitResult = client
-            .call(
-                "inventory.wait",
-                WaitParams {
-                    generation,
-                    timeout_ms: Some(60_000),
-                },
-            )
-            .map_err(|e| app.rpc_fail(e))?;
+        let r: WaitResult = match client.call(
+            "inventory.wait",
+            WaitParams {
+                generation,
+                timeout_ms: Some(60_000),
+            },
+        ) {
+            Ok(r) => r,
+            Err(e @ ClientError::Rpc(_)) => return Err(app.rpc_fail(e)),
+            // The daemon went away: it restarts itself when a configuration
+            // source changes. Until the old one has released its socket a
+            // reconnect can still reach it and fail, so retry a few times.
+            Err(_) => {
+                let mut attempt = 0;
+                // The pause also keeps a daemon that accepts but fails every
+                // request from turning this into a busy loop.
+                client = loop {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    match connector.connect_or_spawn() {
+                        Ok(c) => break c,
+                        Err(e) if attempt == 4 => return Err(app.rpc_fail(e)),
+                        Err(_) => attempt += 1,
+                    }
+                };
+                // A restarted daemon counts generations from zero again.
+                generation = 0;
+                continue;
+            }
+        };
         for change in &r.changes {
             if app.json {
                 println!("{}", serde_json::to_string(change).unwrap());
