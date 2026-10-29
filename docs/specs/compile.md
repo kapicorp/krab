@@ -190,6 +190,11 @@ CMP-22 An item that fails MUST fail its target with
 ### Incremental builds
 
 ```
+CMP-54 An incremental compile MUST write the same files under compiled/,
+       the manifest aside, as a clean compile of the same sources.
+       Test: crates/krab/tests/incremental_equals_clean.rs::incremental_compiles_equal_clean_ones
+       Since: #300
+
 CMP-23 A candidate MUST be compiled when one of these holds, checked in this
        order, and the first that holds is its reason:
          no record                               "never compiled"
@@ -255,9 +260,11 @@ CMP-30 Targets read through the global inventory MUST be recorded by name
 CMP-31 The settings digest MUST cover the search paths, the --flag values,
        the output path, the backend and the native options (refs path,
        embed refs, reveal, indent, rapidyaml, null as empty, multiline
-       style).
-       Test: none
-       Since: 58f8ddd
+       style), with paths relative to the repository, and nothing else: a
+       moved checkout and another `compile.python-timeout` keep the
+       records.
+       Test: crates/krab/tests/incremental_equals_clean.rs::incremental_compiles_equal_clean_ones (partial: the move step)
+       Since: 58f8ddd, #300
 
 CMP-32 The output tree digest MUST cover every file under
        `compiled/<target path>` (relative path and fingerprint), excluding
@@ -299,6 +306,18 @@ CMP-36 A document read MUST be recorded as `parameters.<key>`, another
        that part (`-` when absent).
        Test: crates/krab-compile/src/native.rs::tests::document_part_digests
        Since: #61
+
+CMP-55 A kadet item's digest MUST cover the item and its input path
+       relative to the repository, so the inputs one glob expands to are not
+       reused for one another.
+       Test: crates/krab/tests/incremental_equals_clean.rs::incremental_compiles_equal_clean_ones (the "add a component under a glob" step)
+       Since: #300
+
+CMP-56 A component's lookup of a target that does not exist MUST be
+       recorded with the digest `-`, so creating that target makes the
+       reader stale.
+       Test: crates/krab/tests/incremental_equals_clean.rs::incremental_compiles_equal_clean_ones (the "add a target another one looked up" step)
+       Since: #300
 ```
 
 ### Kadet evaluator isolation

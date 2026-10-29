@@ -211,8 +211,15 @@ impl NativeCompiler {
         let inputs = resolve_input_paths(item, &search_paths, &plan.name, reads)?;
         match item.input_type.as_str() {
             "kadet" => {
-                let item_digest = digest_str(&item.raw.to_string());
                 for input in inputs {
+                    // Per input: a glob's inputs must not stand in for one
+                    // another, and the path is relative so a moved checkout
+                    // keeps its records (CMP-61).
+                    let item_digest = digest_str(&format!(
+                        "{}\0{}",
+                        item.raw,
+                        relative(&input, &self.opts.repo_root)
+                    ));
                     let mut item_reads = Reads::default();
                     let record = match reusable(ctx, &item_digest, plan, &mut records.matched) {
                         Some(previous) => {
@@ -360,6 +367,12 @@ impl NativeCompiler {
     }
 }
 
+/// The digest recorded for another target a component looked up: `-` when
+/// it does not exist, so creating it later counts as a change (CMP-62).
+pub(crate) fn global_digest<'a>(all: &'a BTreeMap<String, String>, name: &str) -> &'a str {
+    all.get(name).map_or("-", String::as_str)
+}
+
 fn relative(path: &Path, root: &Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
@@ -410,7 +423,7 @@ fn reusable<'a>(
             .iter()
             .all(|(name, d)| match name.as_str() {
                 "*" => d == ctx.everything_digest,
-                _ => ctx.all_digests.get(name) == Some(d),
+                _ => global_digest(ctx.all_digests, name) == d,
             })
         && previous
             .outputs
@@ -465,12 +478,8 @@ fn item_record(
     if reads.globals.iter().any(|g| g == "*") {
         globals.insert("*".to_string(), ctx.everything_digest.to_string());
     } else {
-        for g in &reads.globals {
-            if g != &plan.name
-                && let Some(d) = ctx.all_digests.get(g)
-            {
-                globals.insert(g.clone(), d.clone());
-            }
+        for g in reads.globals.iter().filter(|g| *g != &plan.name) {
+            globals.insert(g.clone(), global_digest(ctx.all_digests, g).to_string());
         }
     }
     ItemRecord {
