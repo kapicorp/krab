@@ -73,12 +73,14 @@ jobs:
           print("accepted = [" + ", ".join(f"\"{a}\"" for a in allow) + "]")' > "$RUNNER_TEMP/about.toml"
           cargo about generate --locked --fail -c "$RUNNER_TEMP/about.toml" \
             -m crates/krab/Cargo.toml about.hbs -o THIRD-PARTY-LICENSES.html
+      # --target all: cargo cyclonedx covers only the host target by default,
+      # which would leave out the macOS-only crates.
       - name: SBOM
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           cargo cyclonedx --manifest-path crates/krab/Cargo.toml -f json \
-            --spec-version 1.5 --no-build-deps --override-filename sbom
+            --spec-version 1.5 --no-build-deps --target all --override-filename sbom
           mv crates/krab/sbom.json "krab-$VERSION.cdx.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
