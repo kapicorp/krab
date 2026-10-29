@@ -298,8 +298,9 @@ CLI-65 The vscode job MUST run npm audit --omit=dev and fail on any
        Since: #287
 
 CLI-66 The vscode job MUST fail when a dependency that ships in the .vsix
-       declares a licence in package-lock.json that is not on the allow list
-       in deny.toml.
+       declares a licence in package-lock.json that the allow list in
+       deny.toml does not cover. An OR expression is covered when one of its
+       identifiers is on the list, as cargo-deny judges it.
        Test: ci.yml: vscode
        Since: #287
 
