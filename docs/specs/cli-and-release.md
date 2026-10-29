@@ -39,9 +39,11 @@ Constraints that shaped the area: contributors work from forks and cannot
 merge; the `main` ruleset is not enforced (#171), so CI informs a maintainer
 rather than blocking a merge; and a pull request should fail only for what it
 changed. Link checking therefore runs weekly instead of per pull request (link
-rot happens on other servers), the dependency policy runs only when the
-dependency set or the policy changed, and a newly published advisory is
-reported without failing the job.
+rot happens on other servers), and the dependency policy runs only when the
+dependency set or the policy changed. A pull request that changes the
+dependency set fails on any known advisory in the resulting lockfile, so a
+vulnerable version cannot be merged unnoticed. Advisories published later
+against an unchanged lockfile are caught by a weekly run on `main`.
 
 ## Requirements
 
@@ -257,10 +259,23 @@ CLI-28 The msrv job MUST read rust-version of package krab from cargo
        Test: ci.yml: msrv
        Since: #107
 
-CLI-29 The deny job MUST run cargo deny check licenses bans sources as a
-       blocking step and cargo deny check advisories as a non-blocking step.
+CLI-29 The deny job MUST run cargo deny check licenses bans sources and
+       cargo deny check advisories, both as blocking steps.
        Test: ci.yml: deny
-       Since: #107
+       Since: #107, this change (advisories blocking)
+
+CLI-63 Every entry under [advisories] ignore in deny.toml MUST carry a
+       reason that says why the advisory does not apply to krab or why it
+       cannot be fixed yet.
+       Test: none
+       Since: this change
+
+CLI-64 .github/workflows/advisories.yml MUST run cargo deny check advisories
+       and npm audit --omit=dev in editors/vscode every Monday at 06:00 UTC
+       and on manual dispatch, and fail on any advisory. It MUST NOT run on
+       pull requests.
+       Test: none
+       Since: this change
 
 CLI-30 deny.toml MUST allow only the licences it lists, deny wildcard
        dependencies, warn on duplicate versions, and deny any registry other
@@ -277,6 +292,11 @@ CLI-32 The vscode job MUST run npm ci and npm run package in editors/vscode
        Test: ci.yml: vscode
        Since: #72
 
+CLI-65 The vscode job MUST run npm audit --omit=dev and fail on any
+       advisory against a dependency that ships in the .vsix.
+       Test: ci.yml: vscode
+       Since: this change
+
 CLI-33 The job "CI passed" MUST depend on changes, lint, test, parity, msrv,
        deny, zizmor and vscode, run even when one of them failed, and fail unless
        every result is success or skipped.
@@ -288,7 +308,7 @@ CLI-34 Every action in every workflow MUST be referenced by a full commit SHA
        Test: ci.yml: zizmor
        Since: #103, #107, #198
 
-CLI-35 ci.yml, release.yml and links.yml MUST set permissions: {} at the
+CLI-35 ci.yml, release.yml, links.yml and advisories.yml MUST set permissions: {} at the
        workflow level and grant each job only what it uses, and every
        checkout MUST set persist-credentials: false. Values from the
        triggering event (ref names, pull request data) MUST reach run:
@@ -556,7 +576,10 @@ CLI-EC-7 Dependency policy on an unrelated pull request. The deny job's check
 steps are skipped and the job succeeds; "CI passed" counts skipped as passing.
 
 CLI-EC-8 New advisory. A RustSec advisory published against a locked
-dependency makes the advisories step fail without failing the deny job.
+dependency fails the next weekly advisories run on `main` (CLI-64) and the deny
+job of every later pull request that changes the dependency set, until the
+dependency is updated or the advisory is ignored with a reason (CLI-63). Pull
+requests that do not change the dependency set are not affected (CLI-EC-7).
 
 CLI-EC-9 Release re-run or pre-created release. Assets are uploaded with
 replacement to the existing release (CLI-45); its notes are not rewritten.
