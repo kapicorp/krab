@@ -248,7 +248,8 @@ jobs:
               allow = set(tomllib.load(f)["licenses"]["allow"])
           with open("package-lock.json") as f:
               packages = json.load(f)["packages"]
-          lic = r"[A-Za-z0-9][A-Za-z0-9.+-]*(?: WITH [A-Za-z0-9][A-Za-z0-9.+-]*)?"
+          word = r"(?!(?:OR|AND|WITH)\b)[A-Za-z0-9][A-Za-z0-9.+-]*"
+          lic = rf"{word}(?: WITH {word})?"
           alts = rf"{lic}(?: OR {lic})*"
           def ok(expr):
               # shortcut: IDs joined by OR, in at most one pair of parentheses; AND,
