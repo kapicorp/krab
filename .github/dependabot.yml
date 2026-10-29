@@ -14,6 +14,17 @@ updates:
       - "area: packaging"
     open-pull-requests-limit: 3
 
+  - package-ecosystem: "npm"
+    directory: "/editors/vscode"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "deps:"
+    labels:
+      - "area: packaging"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

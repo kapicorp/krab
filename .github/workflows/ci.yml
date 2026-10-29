@@ -178,8 +178,9 @@ jobs:
           cargo "+$msrv" check --locked --all-targets
 
   deny:
-    # Licences, duplicate and wildcard dependencies, and the registries they
-    # come from.
+    # Licences, duplicate and wildcard dependencies, the registries they come
+    # from, and known advisories. advisories.yml catches advisories published
+    # after the merge.
     name: Dependency policy
     needs: changes
     if: needs.changes.outputs.deny == 'true'
@@ -194,10 +195,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check licenses bans sources
-      # An advisory published overnight is news, not a reason to block an
-      # unrelated pull request.
       - name: Advisories
-        continue-on-error: true
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check advisories
@@ -239,6 +237,31 @@ jobs:
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci
+      # Only what ships in the .vsix; dev dependencies just build it.
+      - run: npm audit --omit=dev
+      # Same allow list as the Rust crates, read from deny.toml.
+      - name: Licences of shipped dependencies
+        shell: python3 {0}
+        run: |
+          import json, re, sys, tomllib
+          with open("../../deny.toml", "rb") as f:
+              allow = set(tomllib.load(f)["licenses"]["allow"])
+          with open("package-lock.json") as f:
+              packages = json.load(f)["packages"]
+          word = r"(?!(?:OR|AND|WITH)\b)[A-Za-z0-9][A-Za-z0-9.+-]*"
+          lic = rf"{word}(?: WITH {word})?"
+          alts = rf"{lic}(?: OR {lic})*"
+          def ok(expr):
+              # shortcut: IDs joined by OR, in at most one pair of parentheses; AND,
+              # nesting and anything malformed fail closed.
+              if not expr or not re.fullmatch(rf"{alts}|\({alts}\)", expr):
+                  return False
+              return any(p in allow for p in expr.strip("()").split(" OR "))
+          bad = [f"{name}: {meta.get('license')}" for name, meta in packages.items()
+                 if name and not meta.get("dev") and not ok(meta.get("license"))]
+          for line in bad:
+              print(f"::error::licence not in deny.toml allow list: {line}")
+          sys.exit(1 if bad else 0)
       - run: npm run package
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
