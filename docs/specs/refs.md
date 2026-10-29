@@ -431,8 +431,8 @@ REF-50 When neither the inventory nor `VAULT_SKIP_VERIFY` sets
        continue unverified. An explicit `skip_verify: true` MUST skip
        verification without a warning. The ref file keeps the
        `skip_verify` default of REF-32.
-       Test: none
-       Since: not met yet (#216)
+       Test: crates/krab-compile/src/refs/vault.rs::tls_is_verified_unless_skip_verify_is_explicit (partial: VAULT_SKIP_VERIFY is not exercised)
+       Since: #238
 ```
 
 ## Acceptance criteria
@@ -526,4 +526,3 @@ The plan for the #144 rows is
 | REF-47 | #144 | `aws_encrypt` writes the plaintext to a mode 0600 temp file in `TMPDIR`, removed on `Drop`, which does not run on `SIGKILL` or `panic=abort`. (F8) |
 | REF-48 | #144 | `write_vaultkv` writes to Vault, then `create()` writes the ref file; a failed file write orphans the Vault value. (F15) |
 | REF-49 | #144 | `gkms`, `awskms` and `azkms` have no tests beyond the `mock` key; `gpg` and Vault tests depend on a local keyring and a mock server. |
-| REF-50 | #216 | An unset `skip_verify` takes kapitan's default `true` (`refs/vault.rs:41-46,142`), so every Vault request skips certificate verification without a word; the system roots are never used |
