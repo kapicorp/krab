@@ -1,7 +1,6 @@
 //! OmegaConf's built-in `oc.*` resolvers.
 
 use super::{Ctx, Registry, ResolverError, ResolverResult, arity, as_str};
-use crate::path::Key;
 use crate::value::{Node, Value};
 
 pub fn register(r: &mut Registry) {
@@ -110,9 +109,4 @@ fn dict_values(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
             .map(|k| Node::new(Value::Str(format!("${{{key}.{k}}}")), ctx.origin))
             .collect(),
     ))
-}
-
-#[allow(dead_code)]
-fn key_display(k: &Key) -> String {
-    k.py_str()
 }
