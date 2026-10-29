@@ -159,13 +159,20 @@ fn merge(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 
 /// `${dict:[..]}`: a literal list of dicts into one dict. The reference only
 /// converts Python lists, so a list referenced from the tree (`${dict:${x}}`)
-/// is returned unchanged.
+/// is returned unchanged. Each item must be a `DictConfig` or a Python
+/// `list`: a referenced mapping or a literal list, not a literal `{..}`.
 fn to_dict(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
+    use super::ArgKind;
     arity("dict", args, 1, 1)?;
     let Value::List(items) = &args[0] else {
         return Ok(args[0].clone());
     };
-    if ctx.arg_kind(0) != super::ArgKind::Literal || !items.iter().all(|i| i.value.is_container()) {
+    let convertible = items.iter().zip(&ctx.item_kinds[0]).all(|(i, k)| match k {
+        ArgKind::Literal => matches!(i.value, Value::List(_)),
+        ArgKind::Node => matches!(i.value, Value::Map(_)),
+        ArgKind::Computed => i.value.is_container(),
+    });
+    if ctx.arg_kind(0) != ArgKind::Literal || !convertible {
         return Ok(args[0].clone());
     }
     let mut out = Map::new();
@@ -330,4 +337,40 @@ fn cond_equal(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
         args.first()
             .is_none_or(|first| args.iter().all(|a| a.py_eq(first))),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::interp::eval::Evaluator;
+    use crate::resolvers::Registry;
+    use crate::source::{SourceId, Sources};
+    use crate::yaml::parse_document;
+    use serde_json::json;
+
+    fn render(doc: &str) -> serde_json::Value {
+        let mut root = parse_document(doc, SourceId::SYNTHETIC).unwrap();
+        let registry = Registry::with_builtins();
+        Evaluator::new(&mut root, &registry, &Sources::new(), "t", false)
+            .resolve_all(1)
+            .unwrap();
+        root.value.to_json()
+    }
+
+    /// kapitan's `to_dict` converts only when every item is a `DictConfig`
+    /// (a referenced mapping) or a Python `list`; a literal `{..}` is a
+    /// plain dict and a referenced list a `ListConfig`.
+    #[test]
+    fn dict_converts_only_referenced_mappings() {
+        let out = render(
+            "l: [{x: 1}, {y: 2}]\nm: [1, 2]\n\
+             d1: '${dict:[{a: 1},{b: 2}]}'\n\
+             d2: '${dict:[${l.0},{z: 3}]}'\n\
+             d3: '${dict:[${l.0},${l.1}]}'\n\
+             d4: '${dict:[${l.0},${m}]}'\n",
+        );
+        assert_eq!(out["d1"], json!([{"a": 1}, {"b": 2}]));
+        assert_eq!(out["d2"], json!([{"x": 1}, {"z": 3}]));
+        assert_eq!(out["d3"], json!({"x": 1, "y": 2}));
+        assert_eq!(out["d4"], json!([{"x": 1}, [1, 2]]));
+    }
 }

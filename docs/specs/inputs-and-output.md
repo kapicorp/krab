@@ -305,6 +305,11 @@ OUT-36 A string that a YAML 1.1 loader would read as another type (int,
        Test: crates/krab-inventory/src/emit/yaml.rs::tests::quoting_rules
        Since: 1b9c9c5
 
+OUT-46 A string INV-48 reads as a string, such as `-.5`, MUST be written
+       plain, by the default dumper and by the rapidyaml one.
+       Test: crates/krab-inventory/src/emit/yaml.rs::tests::a_signed_leading_dot_is_written_plain
+       Since: #301
+
 OUT-37 Floats MUST be written as Python's `repr` with `.0` inserted before
        an exponent, and as `.nan`, `.inf`, `-.inf`. Null MUST be `null`, or
        empty with `compile.yaml-dump-null-as-empty: true`.
