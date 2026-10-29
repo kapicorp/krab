@@ -178,8 +178,9 @@ jobs:
           cargo "+$msrv" check --locked --all-targets
 
   deny:
-    # Licences, duplicate and wildcard dependencies, and the registries they
-    # come from.
+    # Licences, duplicate and wildcard dependencies, the registries they come
+    # from, and known advisories. advisories.yml catches advisories published
+    # after the merge.
     name: Dependency policy
     needs: changes
     if: needs.changes.outputs.deny == 'true'
@@ -194,10 +195,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check licenses bans sources
-      # An advisory published overnight is news, not a reason to block an
-      # unrelated pull request.
       - name: Advisories
-        continue-on-error: true
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check advisories
@@ -239,6 +237,8 @@ jobs:
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
       - run: npm ci
+      # Only what ships in the .vsix; dev dependencies just build it.
+      - run: npm audit --omit=dev
       - run: npm run package
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

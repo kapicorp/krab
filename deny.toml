@@ -1,8 +1,8 @@
 # cargo-deny: what krab is allowed to depend on.
 #
-# .github/workflows/ci.yml runs `licenses`, `bans` and `sources` as hard
-# failures and `advisories` as a soft one, so an advisory published overnight
-# reports on an unrelated pull request instead of blocking it.
+# .github/workflows/ci.yml runs every check as a hard failure on pull requests
+# that change the dependency set. .github/workflows/advisories.yml repeats the
+# advisories check weekly, for advisories published after a merge.
 
 [graph]
 all-features = true
@@ -40,6 +40,8 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
 [advisories]
-# Reported, never a merge blocker. `ignore` is for an advisory that has been
-# read and accepted; each entry says why and when it was looked at.
-ignore = []
+# `ignore` is for an advisory that has been read and accepted. Each entry says
+# why and when it was looked at (CLI-63).
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "rsa: Marvin timing side channel, no fixed release. krab only generates keys and signs GCP service-account token requests locally, which gives an attacker no decryption or signing oracle to time. Checked 2026-10-29." },
+]
