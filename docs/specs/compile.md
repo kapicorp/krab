@@ -173,6 +173,12 @@ CMP-21 Output an item writes outside `compiled/<target path>` MUST NOT be
        discarded silently.
        Test: none
        Since: not met yet (#133)
+
+CMP-58 A target whose path is not a relative path below compiled/, such as
+       the name `.tmp.x` whose path is `/tmp/x`, MUST fail before anything
+       is written or removed for it (D28).
+       Test: crates/krab/tests/output_path.rs::a_target_path_outside_compiled_fails_without_touching_it
+       Since: #303
 ```
 
 ### Item failures
