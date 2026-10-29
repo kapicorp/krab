@@ -243,15 +243,19 @@ jobs:
       - name: Licences of shipped dependencies
         shell: python3 {0}
         run: |
-          import json, sys, tomllib
+          import json, re, sys, tomllib
           with open("../../deny.toml", "rb") as f:
               allow = set(tomllib.load(f)["licenses"]["allow"])
           with open("package-lock.json") as f:
               packages = json.load(f)["packages"]
+          lic = r"[A-Za-z0-9][A-Za-z0-9.+-]*(?: WITH [A-Za-z0-9][A-Za-z0-9.+-]*)?"
+          alts = rf"{lic}(?: OR {lic})*"
           def ok(expr):
-              # shortcut: OR of plain IDs only; AND and nested parentheses fail closed.
-              parts = [p.strip(" ()") for p in (expr or "").split(" OR ")]
-              return all(" AND " not in p for p in parts) and any(p in allow for p in parts)
+              # shortcut: IDs joined by OR, in at most one pair of parentheses; AND,
+              # nesting and anything malformed fail closed.
+              if not expr or not re.fullmatch(rf"{alts}|\({alts}\)", expr):
+                  return False
+              return any(p in allow for p in expr.strip("()").split(" OR "))
           bad = [f"{name}: {meta.get('license')}" for name, meta in packages.items()
                  if name and not meta.get("dev") and not ok(meta.get("license"))]
           for line in bad:
