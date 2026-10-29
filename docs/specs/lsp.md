@@ -230,6 +230,13 @@ LSP-24 When the daemon cannot be reached, the server MUST tell the user, and
        or report a file as included by no target.
        Test: none
        Since: 627c332
+
+LSP-29 Diagnostics from several targets that share file, range, code and
+       message MUST be published once. The first target's diagnostic is
+       kept, and its `source` names every target that reported it, in the
+       order the daemon returned them: "krab (<target>, <target>, ...)".
+       Test: crates/krab-lsp/src/server.rs::tests::one_diagnostic_per_location_and_message
+       Since: #299
 ```
 
 ### VS Code extension
@@ -254,6 +261,15 @@ LSP-27 The command `krab.restartServer` MUST stop every client and start
        folders that qualify under LSP-25.
        Test: none
        Since: 627c332
+
+LSP-30 `krab.restartServer` MUST start the clients again after a client
+       failed to start, for example because `krab.path` names no binary.
+       A client whose start failed is forgotten, and a client that fails
+       to stop does not keep the others from stopping or restarting.
+       Test: manual: set `krab.path` to a missing binary and open a folder
+       with `.kapitan`, fix `krab.path`, run "Restart Language Server", and
+       see the output channel show the server starting
+       Since: #299
 
 LSP-28 CI MUST package the extension as a `.vsix` on every pull request
        (artifact `krab-vscode`), and the release workflow MUST attach it to
