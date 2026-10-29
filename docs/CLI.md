@@ -237,7 +237,10 @@ path and `<build>` the binary's version, size and mtime. Two builds pointed
 at the same inventory (the shell's `krab` and a development build the
 editor was pointed at) each
 keep their own daemon rather than restart each other's; a rebuilt binary gets
-a fresh socket and the previous daemon idles out. Log, shared by all builds:
+a fresh socket and the previous daemon idles out. The socket directory is
+created `0700` and the socket `0600`. When the directory belongs to another
+user or is a symlink, krab does not use the daemon and renders locally with a
+warning. Log, shared by all builds:
 `$XDG_STATE_HOME/krab/server-<inventory>.log` (fallback
 `~/.local/state/krab/`).
 

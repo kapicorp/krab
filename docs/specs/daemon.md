@@ -122,10 +122,17 @@ SRV-13 The build identity MUST be `<crate version>+<size>-<mtime>`, where
        Test: none
        Since: 58f8ddd
 
-SRV-14 The socket and the directory holding it MUST be usable only by the
-       user who owns the daemon.
-       Test: none
-       Since: b3c122e
+SRV-14 The runtime directory MUST have mode 0700 and the socket mode 0600,
+       whatever the umask.
+       Test: crates/krab-server/tests/permissions.rs::the_runtime_directory_and_the_socket_are_private_whatever_the_umask
+       Since: #292
+
+SRV-14a The daemon and the client MUST refuse a runtime directory that is
+       not a directory owned by the current user, instead of binding or
+       connecting in it. One the user owns but group or others can access
+       MUST be set to 0700 first.
+       Test: crates/krab-server/tests/permissions.rs::a_runtime_directory_that_is_not_its_own_is_refused, crates/krab-server/tests/foreign_runtime_dir.rs::the_client_refuses_a_runtime_directory_that_is_not_its_own (partial: a directory owned by another user needs a second account; a symlink stands in)
+       Since: #292
 
 SRV-15 When the socket path exceeds the platform limit for unix socket
        addresses, the client MUST fail at once with a message naming the
@@ -499,7 +506,6 @@ digest, doc_digest, ok, error?, labels, classes (count), inputs}`.
 | SRV-32 | #136 | Watcher errors drop the batch at warn (`watch.rs:27-31`) and an overflow, which carries no paths, is ignored; nothing forces a rescan, so a missed event leaves the render stale until restart. |
 | SRV-32 | #59 | Unverified. A daemon kept serving a class file's old content after the file was reverted with `git checkout` in a git worktree; its log showed a watch on a symlink target directory and no event after the initial render. Not reproduced in a plain repository or a symlinked directory; the worktree layout is unverified. #136 is a candidate cause. |
 | SRV-44 | #139 | Log lines carry no pid or build, and every build appends to one file (`paths.rs:68-70`). Fatal errors (bind failure, watcher start failure, a panicking accept loop) return to `main` and reach the log as a bare `error:` line from `eprintln!`, bypassing `tracing`. |
-| SRV-14 | #150 | Without XDG_RUNTIME_DIR, `/tmp/krab-<uid>` and the socket take their mode from the umask (`rpc.rs:37`, no chmod after bind) and no peer credential check exists. On Linux a connect needs write permission on the socket (unix(7)), so under umask 022 other users cannot connect, but under umask 002 the owner's group can, and systems that ignore socket permissions (unix(7) names older BSDs) protect nothing. |
 | SRV-8 | #169 | The spawned `Child` is dropped (`client.rs:206`), so a daemon that exits while the spawning process lives becomes a zombie, and the client polls only the socket (`client.rs:145-149`), waiting the full 10 s after the child has died. |
 | SRV-15 | #170 | `socket_path` (`paths.rs:38-41`) does not check the length; with a long XDG_RUNTIME_DIR the bind fails with "path must be shorter than SUN_LEN" and every command waits 10 s before rendering locally. |
 | SRV-5 | #134 | No test compares the daemon and `--no-daemon` paths; every CLI integration test runs with `--no-daemon`. |
