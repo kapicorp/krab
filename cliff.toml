@@ -11,7 +11,7 @@
 header = ""
 body = """
 {% for group, commits in commits | group_by(attribute="group") %}
-### {{ group }}
+### {{ group | striptags | trim }}
 {% for commit in commits %}
 - {{ commit.message | split(pat="\n") | first | split(pat=":") | slice(start=1) | join(sep=":") | trim }}\
 {% endfor %}
@@ -36,6 +36,11 @@ commit_parsers = [
     # Merge commits and version bumps are bookkeeping, not news.
     { message = "^Merge ", skip = true },
     { message = "^Bump version", skip = true },
+
+    # Security fixes lead the notes whatever their area (CLI-70), as long as
+    # the commit message names the advisory ID. Groups sort by name, so the
+    # hidden "0" puts this one first; the template strips it.
+    { message = "(CVE|GHSA|RUSTSEC)-[0-9]", group = "<!-- 0 -->Security" },
 
     { message = "^inventory: ", group = "Inventory" },
     { message = "^server: ", group = "Inventory server" },
