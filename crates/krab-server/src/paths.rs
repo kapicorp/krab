@@ -3,11 +3,17 @@
 use std::os::unix::net::{SocketAddr, UnixStream};
 use std::path::{Path, PathBuf};
 
+/// The inventory and the working directory: a daemon reads `.kapitan` and
+/// resolves relative paths from the directory it was started in, so a client
+/// in another directory needs a daemon of its own (SRV-49).
 fn inventory_key(inventory_root: &Path) -> String {
-    let canonical = inventory_root
-        .canonicalize()
-        .unwrap_or_else(|_| inventory_root.to_path_buf());
-    blake3::hash(canonical.to_string_lossy().as_bytes()).to_hex()[..16].to_string()
+    let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let mut h = blake3::Hasher::new();
+    h.update(canonical(inventory_root).to_string_lossy().as_bytes());
+    h.update(b"\0");
+    h.update(canonical(&cwd).to_string_lossy().as_bytes());
+    h.finalize().to_hex()[..16].to_string()
 }
 
 fn runtime_dir() -> PathBuf {

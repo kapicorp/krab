@@ -793,7 +793,7 @@ impl Inventory {
             applications,
             exports,
             files,
-            probes,
+            mut probes,
             warnings,
             log,
         } = closure;
@@ -812,6 +812,7 @@ impl Inventory {
             );
             ev.resolve_all(self.cfg.passes)?;
             warnings.append(&mut ev.warnings);
+            probes.append(&mut ev.files_read);
             std::mem::take(&mut ev.events)
         };
         process_literals(&mut params);
