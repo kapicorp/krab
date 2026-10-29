@@ -381,6 +381,12 @@ CLI-44 Release notes MUST come from git cliff --latest with cliff.toml, which
        Test: none
        Since: #103
 
+CLI-70 Release notes MUST list every commit whose message names a CVE, GHSA
+       or RUSTSEC identifier under a Security heading that comes first,
+       whatever its area prefix.
+       Test: none
+       Since: #288
+
 CLI-45 A tag containing "-" MUST produce a pre-release. When a release for the
        tag already exists, the assets MUST be uploaded to it, replacing
        assets of the same name, instead of creating a release.
