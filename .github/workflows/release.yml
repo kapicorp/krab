@@ -49,9 +49,52 @@ jobs:
             exit 1
           fi
 
+  notices:
+    # Third-party licence notices for the archives and wheels (CLI-67, CLI-68)
+    # and the SBOM (CLI-69). The tool versions follow install-action's own
+    # manifest, so a Dependabot bump of the action updates them.
+    name: Licence notices and SBOM
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908 # v2.87.15
+        with:
+          tool: cargo-about,cargo-cyclonedx
+      - name: Licence notices
+        # The accepted licences come from deny.toml, so there is one allow list.
+        run: |
+          python3 -c 'import tomllib
+          allow = tomllib.load(open("deny.toml", "rb"))["licenses"]["allow"]
+          print("accepted = [" + ", ".join(f"\"{a}\"" for a in allow) + "]")' > "$RUNNER_TEMP/about.toml"
+          cargo about generate --locked --fail -c "$RUNNER_TEMP/about.toml" \
+            -m crates/krab/Cargo.toml about.hbs -o THIRD-PARTY-LICENSES.html
+      - name: SBOM
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cargo cyclonedx --manifest-path crates/krab/Cargo.toml -f json \
+            --spec-version 1.5 --no-build-deps --override-filename sbom
+          mv crates/krab/sbom.json "krab-$VERSION.cdx.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: notices
+          path: THIRD-PARTY-LICENSES.html
+          if-no-files-found: error
+      # Named krab-* so the release job picks it up with the archives.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: krab-sbom
+          path: krab-*.cdx.json
+          if-no-files-found: error
+
   binary:
     name: krab (${{ matrix.target }})
-    needs: version
+    needs: [version, notices]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -106,6 +149,9 @@ jobs:
             echo "::error::krab needs $highest, above the glibc $GLIBC floor"
             exit 1
           fi
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: notices
       - name: Package
         env:
           VERSION: ${{ needs.version.outputs.version }}
@@ -113,7 +159,9 @@ jobs:
         run: |
           name="krab-$VERSION-$TARGET"
           mkdir "$name"
-          cp "target/$TARGET/release/krab" LICENSE README.md "$name/"
+          cp "target/$TARGET/release/krab" LICENSE README.md THIRD-PARTY-LICENSES.html "$name/"
+          # maturin packs everything under python/krab into the wheel.
+          cp THIRD-PARTY-LICENSES.html python/krab/
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
