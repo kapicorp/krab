@@ -26,7 +26,7 @@ hex = { workspace = true }
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 flate2 = "1.1.10"
 tar = "0.4.46"
-zip = { version = "7", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 rand = "0.8"
 rsa = "0.9"
 ed25519-dalek = { version = "3", features = ["pkcs8", "pem"] }
