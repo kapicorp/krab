@@ -239,6 +239,22 @@ jobs:
       - run: npm ci
       # Only what ships in the .vsix; dev dependencies just build it.
       - run: npm audit --omit=dev
+      # Same allow list as the Rust crates, read from deny.toml.
+      # shortcut: an SPDX expression ("MIT OR Apache-2.0") must match an
+      # allow-list entry verbatim, so it fails closed until one is added.
+      - name: Licences of shipped dependencies
+        shell: python3 {0}
+        run: |
+          import json, sys, tomllib
+          with open("../../deny.toml", "rb") as f:
+              allow = set(tomllib.load(f)["licenses"]["allow"])
+          with open("package-lock.json") as f:
+              packages = json.load(f)["packages"]
+          bad = [f"{name}: {meta.get('license')}" for name, meta in packages.items()
+                 if name and not meta.get("dev") and meta.get("license") not in allow]
+          for line in bad:
+              print(f"::error::licence not in deny.toml allow list: {line}")
+          sys.exit(1 if bad else 0)
       - run: npm run package
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
