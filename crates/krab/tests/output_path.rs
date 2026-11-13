@@ -71,3 +71,49 @@ fn output_path_outside_the_target_directory_fails() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// A target name starting with a dot gives an absolute target path
+/// (`.tmp.x` is `/tmp/x`). The target fails before anything is written or
+/// removed there (CMP-58); before, the directory was emptied.
+#[test]
+fn a_target_path_outside_compiled_fails_without_touching_it() {
+    let victim_name = format!("krabprobe{}", std::process::id());
+    let victim = std::path::PathBuf::from("/tmp").join(&victim_name);
+    let _ = std::fs::remove_dir_all(&victim);
+    std::fs::create_dir_all(&victim).unwrap();
+    std::fs::write(victim.join("keep.txt"), "keep\n").unwrap();
+
+    let dir = std::env::temp_dir().join(format!("krab-target-path-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("inventory/targets")).unwrap();
+    std::fs::create_dir_all(dir.join("templates")).unwrap();
+    std::fs::write(
+        dir.join(".kapitan"),
+        "global:\n  inventory-backend: omegaconf\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("templates/a.txt"), "a\n").unwrap();
+    std::fs::write(
+        dir.join(format!("inventory/targets/.tmp.{victim_name}.yml")),
+        "parameters:\n  kapitan:\n    vars:\n      target: x\n    compile:\n      - input_type: copy\n        input_paths: [templates/a.txt]\n        output_path: .\n",
+    )
+    .unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_krab"))
+        .args(["compile", "--no-daemon"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let kept = victim.join("keep.txt").is_file();
+    let written = victim.join("a.txt").exists();
+    let _ = std::fs::remove_dir_all(&victim);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        kept,
+        "the directory outside compiled/ was emptied: {stderr}"
+    );
+    assert!(!written, "wrote outside compiled/: {stderr}");
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains(&victim_name), "{stderr}");
+}

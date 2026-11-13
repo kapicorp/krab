@@ -90,6 +90,19 @@ impl TargetPlan {
     /// An error for the first compile item whose `output_path` leaves
     /// `compiled/<target path>`: only that directory is installed (D14).
     pub fn output_outside_target(&self) -> Option<String> {
+        // `.tmp.x` is `/tmp/x`: the target path itself must stay below
+        // compiled/, or installing it empties a directory elsewhere (CMP-58).
+        let target = Path::new(&self.target_path);
+        if target.as_os_str().is_empty()
+            || !target
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)))
+        {
+            return Some(format!(
+                "target path `{}` leaves compiled/; a target name must not start with a dot",
+                self.target_path
+            ));
+        }
         self.compile.iter().find_map(|item| {
             let out = item
                 .get("output_path")
