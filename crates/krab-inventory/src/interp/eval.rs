@@ -436,15 +436,13 @@ impl<'a> Evaluator<'a> {
                 let name = parts.join(".");
                 let mut values = Vec::with_capacity(args.len());
                 let mut kinds = Vec::with_capacity(args.len());
+                let mut item_kinds = Vec::with_capacity(args.len());
                 for a in args {
                     values.push(self.eval_element(a, at, origin)?);
-                    kinds.push(match a {
-                        Element::Prim(Prim::Interp(i)) => match **i {
-                            Interp::Node { .. } => crate::resolvers::ArgKind::Node,
-                            Interp::Resolver { .. } => crate::resolvers::ArgKind::Computed,
-                        },
-                        Element::Prim(Prim::Concat(_)) => crate::resolvers::ArgKind::Computed,
-                        _ => crate::resolvers::ArgKind::Literal,
+                    kinds.push(arg_kind(a));
+                    item_kinds.push(match a {
+                        Element::List(items) => items.iter().map(arg_kind).collect(),
+                        _ => Vec::new(),
                     });
                 }
                 let Some(resolver) = self.registry.get(&name) else {
@@ -469,6 +467,7 @@ impl<'a> Evaluator<'a> {
                     origin,
                     resolver: &name,
                     arg_kinds: kinds,
+                    item_kinds,
                 };
                 match resolver(&mut ctx, &values) {
                     Ok(v) => Ok(Resolved::Owned(v)),
@@ -526,11 +525,9 @@ impl<'a> Evaluator<'a> {
                                 None
                             }
                         }
+                        // OmegaConf: a negative index is not found.
                         Value::List(l) => match key.trim().parse::<i64>() {
-                            Ok(mut idx) => {
-                                if idx < 0 {
-                                    idx += l.len() as i64;
-                                }
+                            Ok(idx) => {
                                 if idx < 0 || idx as usize >= l.len() {
                                     None
                                 } else {
@@ -577,10 +574,7 @@ impl<'a> Evaluator<'a> {
                 Resolved::Owned(v) => {
                     let child = match &v {
                         Value::Map(m) => m.get(key).map(|n| n.value.clone()),
-                        Value::List(l) => key.trim().parse::<i64>().ok().and_then(|mut idx| {
-                            if idx < 0 {
-                                idx += l.len() as i64;
-                            }
+                        Value::List(l) => key.trim().parse::<i64>().ok().and_then(|idx| {
                             l.get(usize::try_from(idx).ok()?).map(|n| n.value.clone())
                         }),
                         _ => None,
@@ -743,5 +737,44 @@ impl<'a> Evaluator<'a> {
             .with_target(self.target)
             .with_path(at.to_string())
             .with_label(origin, "in this value")
+    }
+}
+
+fn arg_kind(a: &Element) -> crate::resolvers::ArgKind {
+    match a {
+        Element::Prim(Prim::Interp(i)) => match **i {
+            Interp::Node { .. } => crate::resolvers::ArgKind::Node,
+            Interp::Resolver { .. } => crate::resolvers::ArgKind::Computed,
+        },
+        Element::Prim(Prim::Concat(_)) => crate::resolvers::ArgKind::Computed,
+        _ => crate::resolvers::ArgKind::Literal,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Evaluator;
+    use crate::resolvers::Registry;
+    use crate::source::{SourceId, Sources};
+    use crate::yaml::parse_document;
+
+    fn render(doc: &str) -> crate::error::Result<serde_json::Value> {
+        let mut root = parse_document(doc, SourceId::SYNTHETIC)?;
+        let registry = Registry::with_builtins();
+        Evaluator::new(&mut root, &registry, &Sources::new(), "t", false).resolve_all(1)?;
+        Ok(root.value.to_json())
+    }
+
+    /// OmegaConf looks a list index up with `0 <= idx < len`, so `-1` is
+    /// not the last element.
+    #[test]
+    fn a_negative_index_is_not_found() {
+        let e = render("l: [a, b]\nv: ${l.-1}\n").unwrap_err();
+        assert_eq!(e.diagnostic().code, "interpolation::key_not_found");
+        let out = render("l: [a, b]\nv: ${oc.select:l.-1,dflt}\n").unwrap();
+        assert_eq!(out["v"], "dflt");
+        // Through a value a resolver returned rather than a node of the tree.
+        let out = render("v: ${oc.select:x.-1,dflt}\nx: ${oc.create:[a, b]}\n").unwrap();
+        assert_eq!(out["v"], "dflt");
     }
 }

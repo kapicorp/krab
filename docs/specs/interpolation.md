@@ -111,12 +111,17 @@ RES-12 A relative path with one leading dot MUST start at the container of
        Test: tests/fixtures/inventory/classes/common.yml (`tier: ${..replicas}`), run by crates/krab-inventory/tests/fixture.rs::renders_like_the_reference
        Since: 319ca84
 
-RES-13 A segment applied to a list MUST be an integer index, negative
-       indices counting from the end; a non-integer segment MUST fail with
-       `interpolation::bad_index`, and an index out of range MUST count as
-       not found.
+RES-13 A segment applied to a list MUST be an integer index; a
+       non-integer segment MUST fail with `interpolation::bad_index`, and
+       an index out of range MUST count as not found.
        Test: tests/fixtures/inventory/classes/components/app/init.yml (`part1`), run by crates/krab-inventory/tests/fixture.rs::renders_like_the_reference
        Since: 319ca84
+
+RES-72 A negative list index MUST count as not found, in a path and in
+       `oc.select`: `${l.-1}` fails with `interpolation::key_not_found` and
+       `${oc.select:l.-1,d}` gives `d`.
+       Test: crates/krab-inventory/src/interp/eval.rs::tests::a_negative_index_is_not_found
+       Since: #301
 
 RES-14 A path that does not exist MUST fail with
        `interpolation::key_not_found`, with help pointing at
@@ -240,7 +245,8 @@ or says none.
 | RES-32 | `oc.decode`, `oc.create`, `oc.deprecated` | parse a string as a grammar element; return the argument; warn and select the new key | none | 319ca84 |
 | RES-33 | `oc.dict.keys:key`, `oc.dict.values:key` | keys of the mapping at `key`; a list of `${key.k}` interpolations, evaluated by a later read (RES-8) | `keys`, `values` | 319ca84 |
 | RES-34 | `merge:a,b,...` | arguments MUST be containers; mappings merge, lists concatenate without deduplication | `merged` | 319ca84 |
-| RES-35 | `dict:[...]` | a literal list of mappings becomes one mapping; a list read from the tree is returned unchanged | `as_dict` | 319ca84 |
+| RES-35 | `dict:[...]` | a literal list becomes one mapping when its items allow it (RES-73); a list read from the tree is returned unchanged | `as_dict` | 319ca84 |
+| RES-73 | `dict:[...]` | the list converts only when every item is a reference to a mapping (`${x}`) or a literal list; a literal `{...}` item, a reference to a list or a scalar leaves it unchanged, as kapitan's `to_dict` only accepts `DictConfig` and Python `list` items | `crates/krab-inventory/src/resolvers/builtin.rs::tests::dict_converts_only_referenced_mappings` | #301 |
 | RES-36 | `list:x` | a mapping becomes a list of one-entry mappings, a string a list of characters, a list stays | `as_list` | 319ca84 |
 | RES-37 | `default:a,b,...,fallback` | returns `${oc.select:a,${oc.select:b,...fallback}}`, evaluated by a later read | `added_default` | 319ca84 |
 | RES-38 | `relpath:path` | the absolute path as a relative interpolation from the current node; the node's own path gives `SELF REFERENCE DETECTED` and a warning | `relpath` | 319ca84 |

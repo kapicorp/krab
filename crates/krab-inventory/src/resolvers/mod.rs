@@ -159,6 +159,9 @@ pub struct Ctx<'c, 'a> {
     pub resolver: &'c str,
     /// One entry per argument.
     pub arg_kinds: Vec<ArgKind>,
+    /// One entry per argument: the kinds of the items of a literal `[..]`
+    /// argument, empty for any other argument.
+    pub item_kinds: Vec<Vec<ArgKind>>,
 }
 
 impl Ctx<'_, '_> {

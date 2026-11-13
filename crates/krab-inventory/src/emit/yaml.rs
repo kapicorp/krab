@@ -1096,6 +1096,16 @@ mod tests {
     }
 
     #[test]
+    fn a_signed_leading_dot_is_written_plain() {
+        let src = "a: -.5\nb: +.5\nc: '.5'\n";
+        let want = "a: -.5\nb: +.5\nc: '.5'\n";
+        assert_eq!(dump(src, true), want);
+        let node = parse_document(src, SourceId(0)).unwrap();
+        let ryml = crate::emit::ryml::dump_ryml(&node, &Default::default(), false);
+        assert_eq!(ryml, want);
+    }
+
+    #[test]
     fn folds_long_plain_scalars() {
         let long = "word ".repeat(30).trim_end().to_string();
         let out = dump(&format!("k: {long}\n"), true);

@@ -311,7 +311,7 @@ impl Inventory {
             ));
         }
         let mut files = Vec::new();
-        walk(&dir, &mut files)?;
+        walk(&dir, false, &mut files)?;
         files.sort();
         let mut targets: Vec<TargetSpec> = Vec::new();
         let mut seen: HashMap<String, &TargetSpec> = HashMap::new();
@@ -376,7 +376,7 @@ impl Inventory {
         let dir = self.cfg.classes_dir();
         let mut files = Vec::new();
         if dir.is_dir() {
-            walk(&dir, &mut files)?;
+            walk(&dir, true, &mut files)?;
         }
         files.sort();
         Ok(files
@@ -999,14 +999,18 @@ fn fnmatch(pattern: &str, name: &str) -> bool {
     toks[t..].iter().all(|t| matches!(t, Tok::Star))
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+fn walk(dir: &Path, follow_links: bool, out: &mut Vec<PathBuf>) -> Result<()> {
     for entry in std::fs::read_dir(dir)
         .map_err(|e| Error::new("io", format!("cannot read {}: {e}", dir.display())))?
     {
         let entry = entry.map_err(|e| Error::new("io", e.to_string()))?;
         let path = entry.path();
         if path.is_dir() {
-            walk(&path, out)?;
+            // Like `os.walk`, a link to a directory is never a file, and is
+            // descended into only when following links.
+            if follow_links || !entry.file_type().is_ok_and(|t| t.is_symlink()) {
+                walk(&path, follow_links, out)?;
+            }
         } else {
             out.push(path);
         }
@@ -1059,6 +1063,25 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// kapitan walks `targets/` with `os.walk` (no `followlinks`) and
+    /// `classes/` with `followlinks=True`.
+    #[cfg(unix)]
+    #[test]
+    fn target_discovery_does_not_follow_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+        let tree = Tree::new("symlinks", &["top.yml"]);
+        let shared = tree.0.join("shared");
+        std::fs::create_dir_all(&shared).unwrap();
+        std::fs::write(shared.join("other.yml"), "parameters: {}\n").unwrap();
+        symlink(".", tree.0.join("targets/self")).unwrap();
+        symlink(&shared, tree.0.join("targets/linked")).unwrap();
+        symlink(&shared, tree.0.join("targets/dir.yml")).unwrap();
+        symlink(&shared, tree.0.join("classes/linked")).unwrap();
+        assert_eq!(tree.names(false), ["top"]);
+        let classes = tree.inventory(false).class_files().unwrap();
+        assert_eq!(classes[0].0, "linked.other");
     }
 
     #[test]

@@ -471,7 +471,11 @@ fn parse_float(text: &str) -> Option<Value> {
         }
     } else {
         if int_part.is_empty() {
-            if frac_part.is_empty() || !frac_part.as_bytes()[0].is_ascii_digit() {
+            // PyYAML's leading-dot alternative has no sign: `-.5` is a string.
+            if body.len() != text.len()
+                || frac_part.is_empty()
+                || !frac_part.as_bytes()[0].is_ascii_digit()
+            {
                 return None;
             }
         } else if !int_part.as_bytes()[0].is_ascii_digit()
@@ -545,6 +549,18 @@ mod tests {
         let ok = parse_document("m: !!map {x: 1}\ns: !!seq [1]\n", SourceId(0)).unwrap();
         assert!(ok.get("m").unwrap().as_map().is_some());
         assert!(ok.get("s").unwrap().as_list().is_some());
+    }
+
+    /// PyYAML's float pattern allows `.5` but not `-.5` or `+.5`.
+    #[test]
+    fn a_signed_leading_dot_is_a_string() {
+        assert!(matches!(v("-.5"), Value::Str(_)));
+        assert!(matches!(v("+.5"), Value::Str(_)));
+        assert!(matches!(v("-0.5"), Value::Float(f) if f == -0.5));
+        assert!(matches!(v("-.inf"), Value::Float(f) if f == f64::NEG_INFINITY));
+        let node = parse_document("-.5: x\n+.5: y\n", SourceId(0)).unwrap();
+        let keys: Vec<_> = node.as_map().unwrap().keys().collect();
+        assert_eq!(keys, ["-.5", "+.5"]);
     }
 
     #[test]

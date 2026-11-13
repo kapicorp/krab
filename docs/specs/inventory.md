@@ -47,6 +47,18 @@ INV-1  Every file with the extension `.yml` or `.yaml` under
        Test: crates/krab-inventory/src/inventory.rs::tests::a_target_in_a_subdirectory_is_named_after_its_file
        Since: 319ca84
 
+INV-49 Target discovery MUST NOT descend into a symlinked directory under
+       `targets/`, and a link loop such as `targets/self -> .` MUST NOT
+       fail it.
+       Test: crates/krab-inventory/src/inventory.rs::tests::target_discovery_does_not_follow_symlinked_directories
+       Since: #301
+```
+
+kapitan walks `targets/` with `os.walk` and its default `followlinks=False`.
+Class files are found through symlinked directories, because kapitan walks
+`classes/` with `followlinks=True`.
+
+```
 INV-2  YAML MUST be read with PyYAML `safe_load` scalar rules (YAML 1.1):
        `yes`/`no`/`on`/`off` are booleans, `0755` is octal, `0x1f` is hex,
        `1_000` is 1000, `1:30` is 90, `1e5` and `1.5e3` are strings,
@@ -54,6 +66,16 @@ INV-2  YAML MUST be read with PyYAML `safe_load` scalar rules (YAML 1.1):
        Test: crates/krab-inventory/src/yaml.rs::tests::yaml11_scalars
        Since: 319ca84
 
+INV-48 A plain scalar with a sign before a leading dot, such as `-.5` or
+       `+.5`, MUST be read as a string, both as a value and as a key.
+       Test: crates/krab-inventory/src/yaml.rs::tests::a_signed_leading_dot_is_a_string
+       Since: #301
+```
+
+PyYAML's YAML 1.1 float pattern allows the leading-dot form only without a
+sign, so `.5` is a float and `-.5` is not.
+
+```
 INV-3  Anchors, aliases and `<<` merge keys MUST work, with explicit keys
        of the mapping winning over merged ones.
        Test: crates/krab-inventory/src/yaml.rs::tests::positions_and_merge_keys
