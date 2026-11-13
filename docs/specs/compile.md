@@ -381,29 +381,29 @@ CMP-50 Every request to a Python worker, kadet evaluator or resolver
        `compile.python-timeout` gives another number of seconds. On expiry
        the worker MUST be killed and the diagnostic MUST name the target
        and the component or resolver.
-       Test: none
-       Since: not met yet (#222)
+       Test: crates/krab/tests/python_timeout.rs::a_kadet_component_past_the_deadline_fails_naming_target_and_component, crates/krab/tests/python_timeout.rs::a_resolver_past_the_deadline_fails_naming_target_and_resolver (partial: the 600 s default is not exercised)
+       Since: #242
 
 CMP-51 When no interpreter is set explicitly, krab MUST try
        `$VIRTUAL_ENV`, `$CONDA_PREFIX`, `.venv` in the project directory or
        its nearest parent, a kapitan PEX on PATH, then `python3`. The
        interpreter chosen MUST be visible in the compile progress line,
        in `krab server status` and in the info log.
-       Test: none
-       Since: not met yet (#223)
+       Test: crates/krab-inventory/src/python.rs::candidates_follow_the_explicit_setting_then_the_environments (partial: the interpreter shown in the progress line, krab server status and the info log is not checked)
+       Since: #243
 
 CMP-52 Every Python runner MUST send its replies on a duplicate of file
        descriptor 1 and point descriptor 1 at stderr before it runs user
        code, so that writes to descriptor 1 from C extensions, `os.write`
        or child processes cannot corrupt the protocol.
-       Test: none
-       Since: not met yet (#221)
+       Test: crates/krab-inventory/tests/python_resolvers.rs::a_resolver_writing_to_fd_1_still_renders, crates/krab/tests/kadet_stdout.rs::a_component_writing_to_fd_1_still_compiles (partial: kapitan_runner.py is not exercised)
+       Since: #241
 
 CMP-53 README.md MUST state the Python versions the runner scripts
        support, and CI MUST run the Python-dependent tests on the oldest
        and the newest of them.
-       Test: none
-       Since: not met yet (#224)
+       Test: ci.yml: test
+       Since: #244
 ```
 
 ### Manifest
@@ -592,7 +592,3 @@ of [../DESIGN.md](../DESIGN.md).
 | CMP-29 | #152 | Only the executable bit of the mode is hashed, and a symlink is fingerprinted by its target's content, never by where it points |
 | CMP-34 | #184 | A kadet item that reuses a module an earlier item imported records no reads of it, so it can be reused with stale output |
 | CMP-23, CMP-28 | #16 | Reads that krab cannot observe are not tracked: binaries an `external` item runs, network access, the helm binary's version for `input_type: helm` |
-| CMP-50 | #222 | `Worker::call_with` waits for the reply with a blocking `read_line` and no deadline, so a hanging component or resolver hangs `krab compile` and the daemon thread serving it |
-| CMP-51 | #223 | The order is `$KRAB_PYTHON`, the flag or `.kapitan`, a kapitan PEX on PATH, then `python3` (RES-63, CMP-45); `VIRTUAL_ENV`, `CONDA_PREFIX` and a project `.venv` are never consulted |
-| CMP-52 | #221 | The runners replace `sys.stdout` with `sys.stderr`, which covers `print()` but not writes to descriptor 1 from C code, `os.write(1, ...)` or child processes |
-| CMP-53 | #224 | No document states the supported Python versions; CI tests 3.12 only |

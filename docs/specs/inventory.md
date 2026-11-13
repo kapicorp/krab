@@ -315,26 +315,26 @@ INV-39 When `enable-class-wildcards` is set (`--enable-class-wildcards`,
        names, in sorted order, as kapitan does. Without it, the entry MUST
        stay a literal class name. A pattern that matches nothing MUST fail
        only the targets that use it (D16).
-       Test: none
-       Since: not met yet (#69)
+       Test: crates/krab-inventory/src/inventory.rs::wildcards_follow_the_reference, tests/fixtures/inventory/targets/wildcard.yml with crates/krab-inventory/tests/fixture.rs::renders_like_the_reference
+       Since: #213
 
 INV-40 A `.kapitan` `version:` that kapitan 0.36.3 does not satisfy MUST
        stop the run, as the reference refuses to compile. When the value is
        a YAML float, the message MUST say it was read as a number and
        should be quoted.
-       Test: none
-       Since: not met yet (#119)
+       Test: crates/krab/tests/version_check.rs::compile_refuses_a_version_pin_it_does_not_match, crates/krab-inventory/src/dotkapitan.rs::version_must_match_the_reference
+       Since: #211
 
 INV-41 An unknown `.kapitan` key MUST be reported. `init.*` keys MUST be
        reported as settings of `kapitan init`, a command krab does not
        have, not as unknown.
-       Test: none
-       Since: not met yet (#142)
+       Test: crates/krab-inventory/src/dotkapitan.rs::reports_keys_it_does_not_apply
+       Since: #212
 
 INV-42 A compile key MUST fall back from the `compile` section to
        `global`, as kapitan's `from_dot_kapitan` does.
-       Test: none
-       Since: not met yet (#164)
+       Test: crates/krab-inventory/src/dotkapitan.rs::section_keys_fall_back_to_global
+       Since: #210
 
 INV-43 A mapping key written twice in one file SHOULD produce a warning.
        Test: none
@@ -348,22 +348,22 @@ INV-44 An inventory that kapitan renders with reclass SHOULD NOT render
 INV-45 `compose-target-name` MUST be resolved in the order of INV-11, and
        a `compose-target-name` or `compose-node-name` key in a section
        kapitan does not read it from MUST produce a warning.
-       Test: none
-       Since: not met yet (#220)
+       Test: crates/krab-inventory/src/dotkapitan.rs::compose_target_name_is_read_in_kapitans_order
+       Since: #235
 
 INV-46 A class resolved through one of the two reclass compatibility
        fallbacks of INV-16 MUST produce a warning naming the file used and
        the paths expected. When that file is `classes/init.yml` or
        `<inventory>/classes.yml` (the dropped parts leave nothing), the
        warning MUST also say that a later release makes it an error.
-       Test: none
-       Since: not met yet (#214)
+       Test: crates/krab-inventory/src/inventory.rs::a_class_found_through_a_reclass_fallback_warns
+       Since: #232
 
 INV-47 A top-level key in a class or target file other than the sections
        of INV-7 MUST produce a warning, with a "did you mean" naming the
        section within edit distance 2 when there is one.
-       Test: none
-       Since: not met yet (#215)
+       Test: crates/krab-inventory/src/classfile.rs::an_unknown_top_level_key_warns_with_a_suggestion
+       Since: #233
 ```
 
 ## Acceptance criteria
@@ -451,12 +451,5 @@ The library entry points other crates use are `Inventory::new`,
 | Requirement | Issue | What `main` does |
 |---|---|---|
 | INV-6 | #219 | A tag on a mapping or sequence (`!!omap`, `!!set`, `!custom`) is dropped and the value renders as a plain mapping or list; `!foo` on a scalar is reported as `!!foo` |
-| INV-39 | #69 | No `enable-class-wildcards` setting; a pattern is always taken literally and fails with `inventory::class_not_found` |
-| INV-40 | #119 | `version` is not read |
-| INV-41 | #142 | Unknown keys are accepted and have no effect, without a word |
-| INV-42 | #164 | `DotKapitan::compile_*` read the `compile` section only |
 | INV-43 | #8 | The last value wins silently |
 | INV-44 | #118 | krab renders it with omegaconf semantics and prints the INV-36 warning; the refusal is not implemented |
-| INV-45 | #220 | `dotkapitan.rs:114-115` reads `compose-node-name` before `compose-target-name`, each from `compile`, `inventory` or `global`, so the two disagree when both keys are set with different values or when `compose-target-name` is written outside `global`; no warning names a key in a section kapitan ignores |
-| INV-46 | #214 | A fallback hit loads without a diagnostic: `componets.nginx` loads `classes/init.yml` |
-| INV-47 | #215 | Other top-level keys are ignored without a diagnostic: `paramters: {replicas: 3}` is dropped |

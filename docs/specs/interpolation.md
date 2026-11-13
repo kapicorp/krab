@@ -406,30 +406,30 @@ not meet them yet; the open deviations below say what it does instead.
 RES-65 Native `truncate` with a `length` below 5 MUST fail the target
        with a diagnostic saying that the Python original returns a value
        longer than `length` there; lengths of 5 and more follow RES-53.
-       Test: none
-       Since: not met yet (#165)
+       Test: crates/krab-inventory/src/resolvers/contrib.rs::truncate_refuses_a_length_below_5
+       Since: #204
 
 RES-66 An unquoted dotted path with a numeric segment in a resolver
        argument (`${oc.select:l.1.z}`) MUST select the list element, as
        the reference does.
-       Test: none
-       Since: not met yet (#167)
+       Test: tests/fixtures/inventory/classes/components/app/init.yml with crates/krab-inventory/tests/fixture.rs::renders_like_the_reference
+       Since: #205
 
 RES-67 A `resolvers.py` that cannot be imported, or lacks
        `pass_resolvers()`, MUST produce a diagnostic carrying the real
        exception while every target renders with the built-in resolvers,
        so that a target fails only where it calls a resolver that is
        missing.
-       Test: none
-       Since: not met yet (#121)
+       Test: crates/krab/tests/broken_resolvers.rs::a_broken_resolvers_py_leaves_the_builtins_working
+       Since: #231
 
 RES-68 A `contrib` resolver used without `.kapitan`
        `inventory.contrib-resolvers: true` MUST produce the warning "krab
        extension; kapitan 0.36.3 fails with Unsupported interpolation
        type" and leave the rendered value unchanged. With the key set it
        MUST NOT warn.
-       Test: none
-       Since: not met yet (#122)
+       Test: crates/krab/tests/contrib_warning.rs::contrib_resolvers_warn_unless_enabled
+       Since: #230
 
 RES-69 `OmegaConf.update(_root_, ...)` in a Python resolver MUST update
        the tree, as it does on the real config root.
@@ -479,8 +479,10 @@ RES-69 `OmegaConf.update(_root_, ...)` in a Python resolver MUST update
   configured or discovered: every command that loads the inventory fails
   with `inventory::python_resolvers` and help naming `KRAB_PYTHON`.
 * RES-EC-5: a `resolvers.py` that cannot be imported, or has no
-  `pass_resolvers()`, fails the whole inventory with
-  `inventory::python_resolvers` (open deviation RES-67).
+  `pass_resolvers()`, gives an `inventory::python_resolvers` warning that
+  carries the exception. Every target renders with the built-in resolvers,
+  and a target that calls one of the file's names fails with
+  `interpolation::unknown_resolver` (RES-67).
 * RES-EC-6: a worker that dies mid-call is retried once (RES-62); a pool
   that stays busy for 60 seconds fails the call (RES-61).
 
@@ -527,8 +529,4 @@ Diagnostic codes of this area: `interpolation::syntax`, `bad_key`,
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
-| RES-65 | #165 | The kept prefix is clamped to empty (`contrib.rs:89`): `truncate:abcdef,3` gives `-e80b` without a diagnostic |
-| RES-66 | #167 | `.1` is parsed as a float and the argument becomes `l0.1.z`, which is not found; `write` destinations are affected the same way |
-| RES-67 | #121 | The whole inventory fails with `inventory::python_resolvers` |
-| RES-68 | #122 | The `contrib` set (RES-50) is always registered without notice |
 | RES-69 | #117 | `_root_` is a proxy that `OmegaConf.update` rejects; `OmegaConf.select` works |
