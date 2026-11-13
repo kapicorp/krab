@@ -74,7 +74,7 @@ names the target and the parameter path.
 
 | Code | Trigger | Typical fix |
 |---|---|---|
-| `resolver::warning` | Warning. A resolver kept the render going and reported a problem: `oc.deprecated` was used, `write` found an origin that is not a mapping or a list, `from_file` found no file, `relpath` points at itself. | Act on the message; the value written is the reference's placeholder, such as `FILE NOT EXISTS`. |
+| `resolver::warning` | Warning. A resolver kept the render going and reported a problem: `oc.deprecated` was used, `write` found an origin that is not a mapping or a list, `from_file` found no file or read one outside the working directory, `relpath` points at itself. | Act on the message; the value written is the reference's placeholder, such as `FILE NOT EXISTS`. |
 | `resolver::krab_extension` | Warning. A value calls a resolver that krab provides but kapitan 0.36.3 does not, so kapitan fails on it with `Unsupported interpolation type`. A resolver of the same name defined in the inventory's `resolvers.py` does not warn. | Set `inventory.contrib-resolvers: true` in `.kapitan` if the inventory is meant for krab only, or replace the call. |
 
 ## server
