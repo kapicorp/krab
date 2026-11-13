@@ -112,9 +112,18 @@ impl Connector {
         paths::socket_path(&self.inventory_root, &self.version)
     }
 
+    /// The socket, once its directory is known to be this user's (SRV-14a).
+    fn checked_socket(&self) -> std::io::Result<PathBuf> {
+        let socket = self.socket();
+        if let Some(dir) = socket.parent() {
+            paths::ensure_private_dir(dir)?;
+        }
+        Ok(socket)
+    }
+
     /// Connect to a compatible running server. `None` when there is none.
     pub fn connect_existing(&self) -> Option<Client> {
-        let socket = self.socket();
+        let socket = self.checked_socket().ok()?;
         let mut client = Client::connect(&socket).ok()?;
         match client.info() {
             Ok(info) if info.version == self.version && info.protocol == PROTOCOL_VERSION => {
@@ -139,6 +148,7 @@ impl Connector {
 
     /// Connect, starting a detached server first when needed.
     pub fn connect_or_spawn(&self) -> Result<Client, ClientError> {
+        self.checked_socket()?;
         if let Some(c) = self.connect_existing() {
             return Ok(c);
         }

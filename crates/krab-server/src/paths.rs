@@ -1,5 +1,6 @@
 //! Where a server for a given inventory lives: socket and log file.
 
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::{SocketAddr, UnixStream};
 use std::path::{Path, PathBuf};
 
@@ -30,6 +31,35 @@ fn runtime_dir_in(xdg_runtime_dir: Option<String>) -> PathBuf {
     PathBuf::from(format!("/tmp/krab-{uid}"))
 }
 
+/// Create the runtime directory with mode 0700, or check the one that exists
+/// (SRV-14, SRV-14a). Whoever controls the directory can put their own
+/// socket in it, so a symlink or a directory of another user is refused.
+/// A directory of ours with another mode, such as one an older krab created
+/// under the umask, is set to 0700.
+pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
+    let meta = std::fs::symlink_metadata(dir)?;
+    // SAFETY: getuid() takes no arguments, cannot fail and has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    if !meta.is_dir() || meta.uid() != uid {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "runtime directory {} is not a directory owned by uid {uid}; \
+                 remove it or set XDG_RUNTIME_DIR",
+                dir.display()
+            ),
+        ));
+    }
+    if meta.mode() & 0o777 != 0o700 {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
 fn state_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("XDG_STATE_HOME")
         && !dir.is_empty()
@@ -54,7 +84,11 @@ pub fn socket_path(inventory_root: &Path, build: &str) -> PathBuf {
 pub fn sockets(inventory_root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let prefix = format!("{}-", inventory_key(inventory_root));
     let (mut live, mut dead) = (Vec::new(), Vec::new());
-    let Ok(entries) = std::fs::read_dir(runtime_dir()) else {
+    let dir = runtime_dir();
+    if ensure_private_dir(&dir).is_err() {
+        return (live, dead);
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
         return (live, dead);
     };
     for entry in entries.flatten() {
