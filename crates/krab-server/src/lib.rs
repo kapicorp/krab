@@ -44,6 +44,10 @@ pub fn run(inv: Inventory, idle_timeout: Duration, version: String) -> std::io::
         let server = server.clone();
         std::thread::spawn(move || server.serve_on(listener))
     };
+    // Watch before the first render: a file changed while it runs (a
+    // checkout on a big inventory) is applied after it instead of lost (SRV-50).
+    let _watcher =
+        watch::start(&root, state.clone()).map_err(|e| std::io::Error::other(e.to_string()))?;
     tracing::info!("initial render started");
     let summary = state.render_all();
     tracing::info!(
@@ -53,8 +57,6 @@ pub fn run(inv: Inventory, idle_timeout: Duration, version: String) -> std::io::
         "initial render"
     );
     state.set_ready();
-    let _watcher =
-        watch::start(&root, state.clone()).map_err(|e| std::io::Error::other(e.to_string()))?;
     accept
         .join()
         .unwrap_or_else(|_| Err(std::io::Error::other("the accept loop panicked")))

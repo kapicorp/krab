@@ -64,8 +64,8 @@ SRV-4  When the daemon cannot be reached or started, a command that has a
 
 SRV-5  The daemon path and the local path MUST give identical results for
        the same inventory and command.
-       Test: none
-       Since: b3c122e
+       Test: crates/krab/tests/daemon_equals_local.rs::the_daemon_answers_like_no_daemon (partial: the steps it lists)
+       Since: b3c122e, #306
 
 SRV-6  The client MUST start the daemon as `<current exe> server run
        --inventory-path <root> --idle-timeout 1800` in a new session
@@ -149,6 +149,12 @@ SRV-17 The log file MUST be `$XDG_STATE_HOME/krab/server-<inventory>.log`
        unset). Every build's daemon for the inventory appends to it.
        Test: none
        Since: b3c122e
+
+SRV-49 The socket key MUST cover the working directory as well as the
+       inventory: a daemon reads `.kapitan` and resolves relative paths from
+       the directory it was started in, so a client elsewhere needs its own.
+       Test: crates/krab/tests/daemon_equals_local.rs::the_daemon_answers_like_no_daemon (the "start the daemon from inventory/" step)
+       Since: #306
 ```
 
 ### Start-up
@@ -170,6 +176,16 @@ SRV-19 The protocol MUST be JSON-RPC 2.0 with one JSON document per line in
        connections are served concurrently, one thread each.
        Test: none
        Since: b3c122e
+
+SRV-51 A connection MUST be read and written in blocking mode, whatever the
+       platform does with the listener's non-blocking flag.
+       Test: crates/krab-server/tests/connection.rs::a_connection_is_answered
+       Since: #307
+
+       The accept loop polls a non-blocking listener. Linux does not pass that
+       flag on to an accepted socket, macOS and the BSDs do, so until this
+       requirement the daemon dropped every macOS client after accept and the
+       client failed with "Broken pipe".
 
 SRV-20 Errors MUST use these codes: -32700 for a line that is not a request
        (answered with id 0), -32601 for an unknown method, -32602 for
@@ -195,6 +211,13 @@ SRV-23 `inventory.targets` and `inventory.all` given `labels` MUST return
        pair; without `labels` (or with null params) they return all targets.
        Test: none
        Since: 000035c
+
+SRV-48 When the targets cannot be listed (two files with one name, no
+       targets/), the daemon MUST keep the previous targets and answer every
+       inventory request except inventory.wait with that error, as
+       --no-daemon fails; inventory.diagnostics lists it among the errors.
+       Test: crates/krab/tests/daemon_equals_local.rs::the_daemon_answers_like_no_daemon (the "two targets with one name" step)
+       Since: #306
 ```
 
 ### Generations and long polls
@@ -271,6 +294,18 @@ SRV-32 Every change on disk under the watched directories MUST eventually
        missed.
        Test: none
        Since: b3c122e
+
+SRV-47 A file that `from_file` read MUST be watched like an inventory file,
+       inside or outside the inventory directory, and a change to it MUST
+       re-render the targets that read it.
+       Test: crates/krab/tests/daemon_equals_local.rs::the_daemon_answers_like_no_daemon (the "change a file from_file reads" step)
+       Since: #306
+
+SRV-50 The watcher MUST start before the initial render; changes seen
+       during it MUST be applied once it is done.
+       Test: manual: a resolver that sleeps 4 s, a class change 2 s after the
+       first request, the daemon serves the new value afterwards
+       Since: #306
 ```
 
 ### Restart on configuration change
@@ -502,4 +537,3 @@ digest, doc_digest, ok, error?, labels, classes (count), inputs}`.
 | SRV-14 | #150 | Without XDG_RUNTIME_DIR, `/tmp/krab-<uid>` and the socket take their mode from the umask (`rpc.rs:37`, no chmod after bind) and no peer credential check exists. On Linux a connect needs write permission on the socket (unix(7)), so under umask 022 other users cannot connect, but under umask 002 the owner's group can, and systems that ignore socket permissions (unix(7) names older BSDs) protect nothing. |
 | SRV-8 | #169 | The spawned `Child` is dropped (`client.rs:206`), so a daemon that exits while the spawning process lives becomes a zombie, and the client polls only the socket (`client.rs:145-149`), waiting the full 10 s after the child has died. |
 | SRV-15 | #170 | `socket_path` (`paths.rs:38-41`) does not check the length; with a long XDG_RUNTIME_DIR the bind fails with "path must be shorter than SUN_LEN" and every command waits 10 s before rendering locally. |
-| SRV-5 | #134 | No test compares the daemon and `--no-daemon` paths; every CLI integration test runs with `--no-daemon`. |

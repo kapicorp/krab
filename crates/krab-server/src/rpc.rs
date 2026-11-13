@@ -84,6 +84,9 @@ impl Server {
     }
 
     fn handle(&self, stream: UnixStream) -> std::io::Result<()> {
+        // macOS and the BSDs pass the listener's O_NONBLOCK on to an accepted
+        // socket, and the first read would fail with WouldBlock (SRV-51).
+        stream.set_nonblocking(false)?;
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut writer = stream;
         let mut line = String::new();
@@ -141,6 +144,17 @@ impl Server {
     }
 
     fn dispatch(&self, req: &Request) -> Result<Json, RpcError> {
+        // Answering from an inventory that could not be listed would hide the
+        // error that `--no-daemon` reports (SRV-48).
+        if req.method.starts_with("inventory.")
+            && !matches!(
+                req.method.as_str(),
+                "inventory.wait" | "inventory.diagnostics"
+            )
+            && let Some(d) = self.state.read().discovery_error.clone()
+        {
+            return Err(inventory_error(d));
+        }
         match req.method.as_str() {
             "server.info" => Ok(serde_json::to_value(self.info()).unwrap()),
             "server.shutdown" => {
@@ -310,7 +324,12 @@ impl Server {
                     .collect();
                 Ok(serde_json::to_value(DiagnosticsResult {
                     generation: inner.generation,
-                    errors: inner.errors.values().cloned().collect(),
+                    errors: inner
+                        .discovery_error
+                        .iter()
+                        .chain(inner.errors.values())
+                        .cloned()
+                        .collect(),
                     warnings,
                 })
                 .unwrap())

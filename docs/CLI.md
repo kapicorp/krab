@@ -229,11 +229,11 @@ The daemon is started automatically by the commands above; these manage it.
 | `server start` | start one detached (no-op when one runs) |
 | `server run [--idle-timeout <SECS>]` | run in the foreground; this is what `start` launches. Default idle timeout 1800 s |
 
-One daemon per inventory directory and build. Socket:
+One daemon per inventory directory, working directory and build. Socket:
 `$XDG_RUNTIME_DIR/krab/<inventory>-<build>.sock` (fallback
 `/tmp/krab-<uid>/`, also when the path under `XDG_RUNTIME_DIR` is too long
 for a unix socket), where `<inventory>` hashes the canonical inventory
-path and `<build>` the binary's version, size and mtime. Two builds pointed
+path and working directory (`.kapitan` and relative paths are read from there), and `<build>` the binary's version, size and mtime. Two builds pointed
 at the same inventory (the shell's `krab` and a development build the
 editor was pointed at) each
 keep their own daemon rather than restart each other's; a rebuilt binary gets

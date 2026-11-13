@@ -79,6 +79,8 @@ pub struct Evaluator<'a> {
     track: bool,
     pub events: Vec<ResolveEvent>,
     pub warnings: Vec<Diagnostic>,
+    /// Files a resolver read (`from_file`): a change to one changes the render.
+    pub files_read: Vec<std::path::PathBuf>,
 }
 
 impl<'a> Evaluator<'a> {
@@ -102,6 +104,7 @@ impl<'a> Evaluator<'a> {
             track,
             events: Vec::new(),
             warnings: Vec::new(),
+            files_read: Vec::new(),
         }
     }
 

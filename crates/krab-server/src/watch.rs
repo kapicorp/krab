@@ -43,6 +43,7 @@ pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
                     if path.is_file()
                         && !State::is_inventory_file(path)
                         && !cb_state.is_registry_source(path)
+                        && !cb_state.is_indexed(path)
                     {
                         continue;
                     }
@@ -54,6 +55,8 @@ pub fn start(root: &Path, state: Arc<State>) -> notify::Result<Handle> {
             if changed.is_empty() {
                 return;
             }
+            // Changes seen during the first render are applied once it is done.
+            cb_state.wait_ready();
             let summary = cb_state.apply_changes(changed);
             tracing::info!(
                 generation = summary.generation,

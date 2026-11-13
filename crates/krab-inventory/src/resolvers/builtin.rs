@@ -285,6 +285,10 @@ fn write(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 fn from_file(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("from_file", args, 1, 1)?;
     let path = as_str("from_file", args, 0)?;
+    // Recorded even when missing: creating the file changes the render (SRV-47).
+    let read =
+        std::env::current_dir().map_or_else(|_| std::path::PathBuf::from(path), |d| d.join(path));
+    ctx.ev.files_read.push(read.canonicalize().unwrap_or(read));
     match std::fs::read_to_string(path) {
         Ok(s) => Ok(Value::Str(s)),
         Err(_) => {
