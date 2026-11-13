@@ -104,13 +104,10 @@ pub fn materialize_kadet_runner() -> std::io::Result<PathBuf> {
         .join(&files_digest()[..16]);
     for (rel, source) in KADET_RUNNER_FILES {
         let path = base.join(rel);
-        if path.exists() {
-            continue;
-        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, source)?;
+        krab_inventory::python::write_if_changed(&path, source)?;
     }
     Ok(base.join("kadet_runner.py"))
 }
