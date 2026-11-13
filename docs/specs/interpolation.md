@@ -251,6 +251,24 @@ or says none.
 | RES-43 | `filename`, `parent_filename`, `path`, `parent_path` | `null` | none | 319ca84 |
 | RES-44 | `escape:x` | see RES-17 | `tf_ref`, `tf_expr` | 319ca84 |
 
+A class fetched as a dependency, or vendored from someone else, can call
+`from_file` on any file the user can read, such as `~/.kube/config`, and the
+value ends up in compiled output (kapicorp/kapitan#1639).
+
+```text
+RES-70 `from_file` MUST warn, naming the path, when the path lies outside
+       the working directory after symbolic links are resolved. It still
+       reads the file; a later release refuses it (D25).
+       Test: crates/krab-inventory/src/resolvers/builtin.rs::from_file_warns_on_a_path_outside_the_working_directory
+       Since: #295
+
+RES-71 `oc.env` MUST warn, naming the variable, when the variable is not
+       listed in `.kapitan` `inventory.env`. It still reads the variable; a
+       later release refuses unlisted ones (D27).
+       Test: crates/krab-inventory/src/resolvers/oc.rs::oc_env_warns_on_a_variable_not_in_inventory_env, crates/krab-inventory/src/dotkapitan.rs::krab_keys_are_not_reported_and_env_is_read
+       Since: #297
+```
+
 ### The write resolver
 
 `${write:destination,origin}` follows kapitan's `write_to_key`.

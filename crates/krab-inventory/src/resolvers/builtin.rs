@@ -285,6 +285,20 @@ fn write(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 fn from_file(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("from_file", args, 1, 1)?;
     let path = as_str("from_file", args, 0)?;
+    // A fetched class could read credentials into the output (RES-70, D25).
+    // shortcut: the inventory path counts as outside when it is not under the
+    // working directory; pass the inventory root here before refusing such paths.
+    if let (Ok(real), Ok(cwd)) = (
+        std::fs::canonicalize(path),
+        std::env::current_dir().and_then(std::fs::canonicalize),
+    ) && !real.starts_with(&cwd)
+    {
+        ctx.warn(format!(
+            "{} is outside the working directory {}; a later release refuses it",
+            real.display(),
+            cwd.display()
+        ));
+    }
     match std::fs::read_to_string(path) {
         Ok(s) => Ok(Value::Str(s)),
         Err(_) => {
@@ -330,4 +344,50 @@ fn cond_equal(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
         args.first()
             .is_none_or(|first| args.iter().all(|a| a.py_eq(first))),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::interp::eval::Evaluator;
+    use crate::resolvers::Registry;
+    use crate::source::{SourceId, Sources};
+    use crate::yaml::parse_document;
+
+    /// The rendered `v` and the warnings the evaluation produced.
+    fn render(expr: &str) -> (String, Vec<String>) {
+        let mut root = parse_document(&format!("v: '{expr}'\n"), SourceId::SYNTHETIC).unwrap();
+        let registry = Registry::with_builtins();
+        let sources = Sources::new();
+        let warnings = {
+            let mut ev = Evaluator::new(&mut root, &registry, &sources, "t", false);
+            ev.resolve_all(1).unwrap();
+            ev.warnings.iter().map(|w| w.message.clone()).collect()
+        };
+        let value = root.get("v").and_then(|n| n.as_str()).unwrap().to_string();
+        (value, warnings)
+    }
+
+    /// RES-70: a file outside the working directory is still read, with a
+    /// warning naming it. Cargo runs tests in the crate directory.
+    #[test]
+    fn from_file_warns_on_a_path_outside_the_working_directory() {
+        let outside = std::env::temp_dir().join(format!("krab-from-file-{}", std::process::id()));
+        std::fs::write(&outside, "secret").unwrap();
+        let (value, warnings) = render(&format!("${{from_file:{}}}", outside.display()));
+        std::fs::remove_file(&outside).unwrap();
+        assert_eq!(value, "secret");
+        let named = outside.canonicalize().unwrap_or(outside.clone());
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("outside the working directory")
+                    && (w.contains(&outside.display().to_string())
+                        || w.contains(&named.display().to_string()))),
+            "{warnings:?}"
+        );
+
+        let (value, warnings) = render("${from_file:Cargo.toml}");
+        assert!(value.contains("[package]"), "{value}");
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
 }

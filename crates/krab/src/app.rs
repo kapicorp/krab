@@ -146,6 +146,7 @@ impl App {
         if !dot.contrib_resolvers {
             contrib::warn_as_extensions(&mut registry, &python_names);
         }
+        krab_inventory::resolvers::oc::warn_unlisted_env(&mut registry, dot.env.clone());
         // The server is configured from `.kapitan` (inventory settings, the
         // Python resolver setup): an edit restarts it like a resolvers.py edit.
         if let Some(file) = &dot.file {

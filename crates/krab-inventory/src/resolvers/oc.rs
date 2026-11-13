@@ -25,6 +25,25 @@ fn select(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     }
 }
 
+/// Wrap `oc.env` so a variable not in `allowed` (`.kapitan` `inventory.env`)
+/// warns once per variable and target and is still read (RES-71, D27).
+pub fn warn_unlisted_env(r: &mut Registry, allowed: Vec<String>) {
+    let Some(f) = r.get("oc.env") else { return };
+    r.register("oc.env", move |ctx, args| {
+        if let Some(name) = args.first().and_then(Value::as_str)
+            && !allowed.iter().any(|a| a == name)
+        {
+            let note = format!(
+                "`{name}` is not listed in .kapitan inventory.env; a later release refuses it"
+            );
+            if !ctx.ev.warnings.iter().any(|w| w.message.ends_with(&note)) {
+                ctx.warn(note);
+            }
+        }
+        f(ctx, args)
+    });
+}
+
 fn env(_ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
     arity("oc.env", args, 1, 2)?;
     let key = as_str("oc.env", args, 0)?;
@@ -115,4 +134,47 @@ fn dict_values(ctx: &mut Ctx, args: &[Value]) -> ResolverResult {
 #[allow(dead_code)]
 fn key_display(k: &Key) -> String {
     k.py_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::interp::eval::Evaluator;
+    use crate::resolvers::Registry;
+    use crate::source::{SourceId, Sources};
+    use crate::yaml::parse_document;
+
+    /// The rendered `v` and the warnings, with `allowed` as `inventory.env`.
+    fn render(expr: &str, allowed: &[&str]) -> (String, Vec<String>) {
+        let mut root = parse_document(&format!("v: '{expr}'\n"), SourceId::SYNTHETIC).unwrap();
+        let mut registry = Registry::with_builtins();
+        super::warn_unlisted_env(
+            &mut registry,
+            allowed.iter().map(|s| s.to_string()).collect(),
+        );
+        let sources = Sources::new();
+        let warnings = {
+            let mut ev = Evaluator::new(&mut root, &registry, &sources, "t", false);
+            ev.resolve_all(1).unwrap();
+            ev.warnings.iter().map(|w| w.message.clone()).collect()
+        };
+        let value = root.get("v").and_then(|n| n.as_str()).unwrap().to_string();
+        (value, warnings)
+    }
+
+    /// RES-71: an unlisted variable is still read, with one warning naming it.
+    #[test]
+    fn oc_env_warns_on_a_variable_not_in_inventory_env() {
+        let path = std::env::var("PATH").unwrap();
+        let (value, warnings) = render("${oc.env:PATH}-${oc.env:PATH}", &[]);
+        assert_eq!(value, format!("{path}-{path}"));
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("`PATH`") && warnings[0].contains("inventory.env"),
+            "{warnings:?}"
+        );
+
+        let (value, warnings) = render("${oc.env:PATH}", &["PATH"]);
+        assert_eq!(value, path);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
 }
