@@ -512,9 +512,52 @@ fn fetch_git(wanted: &[Wanted], save_dir: &Path) -> GroupResults {
         .collect()
 }
 
+/// Total time for one download or registry request (FET-29, D26); tests
+/// use a short one so a stall shows in seconds.
+pub(crate) const FETCH_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_secs(2)
+} else {
+    Duration::from_secs(600)
+};
+
+/// Most bytes one body may carry, and one archive may unpack to (FET-29).
+pub(crate) const FETCH_MAX_BYTES: u64 = if cfg!(test) { 1 << 20 } else { 1 << 30 };
+
+/// Passes at most [`FETCH_MAX_BYTES`] through, then fails with
+/// `FileTooLarge`, so an archive cannot unpack without bound (FET-29).
+struct Capped<R> {
+    inner: R,
+    left: u64,
+}
+
+impl<R: Read> Capped<R> {
+    fn new(inner: R) -> Self {
+        Capped {
+            inner,
+            left: FETCH_MAX_BYTES,
+        }
+    }
+}
+
+impl<R: Read> Read for Capped<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        self.left = self.left.checked_sub(n as u64).ok_or_else(too_large)?;
+        Ok(n)
+    }
+}
+
+fn too_large() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::FileTooLarge,
+        format!("larger than {FETCH_MAX_BYTES} bytes unpacked"),
+    )
+}
+
 fn download(source: &str) -> Result<(Vec<u8>, Option<String>), String> {
     let agent = ureq::Agent::config_builder()
         .timeout_connect(Some(Duration::from_secs(30)))
+        .timeout_global(Some(FETCH_TIMEOUT))
         .http_status_as_error(true)
         .user_agent(format!("kapitan/{}", env!("CARGO_PKG_VERSION")))
         .build()
@@ -534,7 +577,7 @@ fn download(source: &str) -> Result<(Vec<u8>, Option<String>), String> {
     let bytes = resp
         .body_mut()
         .with_config()
-        .limit(u64::MAX)
+        .limit(FETCH_MAX_BYTES)
         .read_to_vec()
         .map_err(|e| e.to_string())?;
     Ok((bytes, content_type))
@@ -636,14 +679,20 @@ pub fn unpack_file(file: &Path, dest: &Path, content_type: Option<&str>) -> Resu
     };
     let untar = |gz: bool| -> Result<(), String> {
         let mut archive: tar::Archive<Box<dyn Read>> = if gz {
-            tar::Archive::new(Box::new(flate2::read::GzDecoder::new(&bytes[..])))
+            tar::Archive::new(Box::new(Capped::new(flate2::read::GzDecoder::new(
+                &bytes[..],
+            ))))
         } else {
             tar::Archive::new(Box::new(&bytes[..]))
         };
         archive.set_overwrite(true);
-        archive
-            .unpack(dest)
-            .map_err(|e| format!("cannot unpack {name}: {e}"))
+        archive.unpack(dest).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::FileTooLarge {
+                format!("cannot unpack {name}: {}", too_large())
+            } else {
+                format!("cannot unpack {name}: {e}")
+            }
+        })
     };
     match content_type {
         "application/x-tar" => {
@@ -653,6 +702,14 @@ pub fn unpack_file(file: &Path, dest: &Path, content_type: Option<&str>) -> Resu
         "application/zip" => {
             let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes[..]))
                 .map_err(|e| format!("cannot open {name}: {e}"))?;
+            // shortcut: checks the sizes the archive declares; one that lies about
+            // them is not caught, stream entries through Capped if that matters.
+            if zip
+                .decompressed_size()
+                .is_none_or(|n| n > u128::from(FETCH_MAX_BYTES))
+            {
+                return Err(format!("cannot unpack {name}: {}", too_large()));
+            }
             zip.extract(dest)
                 .map_err(|e| format!("cannot unpack {name}: {e}"))?;
             Ok(true)
@@ -913,7 +970,7 @@ fn extract_tar_blobs(dir: &Path) -> Result<(), String> {
     for file in files {
         let bytes =
             std::fs::read(&file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
-        let Some(tar) = tar_bytes(&bytes) else {
+        let Some(tar) = tar_bytes(&bytes).map_err(|e| format!("{}: {e}", file.display()))? else {
             continue;
         };
         let mut archive = tar::Archive::new(&tar[..]);
@@ -951,13 +1008,14 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// The uncompressed bytes when `bytes` is a tar archive, gzipped or plain
 /// (`tarfile.is_tarfile` accepts both).
-fn tar_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
+fn tar_bytes(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
     let plain: Vec<u8> = if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut out = Vec::new();
-        flate2::read::GzDecoder::new(bytes)
-            .read_to_end(&mut out)
-            .ok()?;
-        out
+        match Capped::new(flate2::read::GzDecoder::new(bytes)).read_to_end(&mut out) {
+            Ok(_) => out,
+            Err(e) if e.kind() == std::io::ErrorKind::FileTooLarge => return Err(e.to_string()),
+            Err(_) => return Ok(None),
+        }
     } else {
         bytes.to_vec()
     };
@@ -965,10 +1023,10 @@ fn tar_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
         && (plain[257..262] == *b"ustar"
             || tar::Archive::new(&plain[..])
                 .entries()
-                .ok()?
-                .next()?
-                .is_ok());
-    is_tar.then_some(plain)
+                .ok()
+                .and_then(|mut e| e.next())
+                .is_some_and(|e| e.is_ok()));
+    Ok(is_tar.then_some(plain))
 }
 
 /// kapitan `safe_copy_tree`: copy `src` into `dst` without overwriting any
@@ -1459,6 +1517,68 @@ mod tests {
             }
         });
         format!("http://{addr}")
+    }
+
+    /// A server that answers with headers and then stalls: the fetch fails
+    /// at the timeout instead of hanging.
+    fn serve_stalled() -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nx");
+            std::thread::sleep(Duration::from_secs(30));
+        });
+        format!("http://{addr}")
+    }
+
+    /// FET-29: a stalled server, a body above the cap and an archive that
+    /// unpacks above the cap each fail the dependency. Tests run with the
+    /// small bounds of `cfg!(test)`.
+    #[test]
+    fn http_downloads_are_bounded() {
+        let dir = tmp("http-bounds");
+        let root = dir.join("repo");
+        std::fs::create_dir_all(&root).unwrap();
+        let fetch_one = |source: String, unpack: bool| {
+            let deps = dependencies(
+                "t",
+                &json!([{"type": "http", "source": source, "output_path": "vendor/x", "unpack": unpack}]),
+                &root,
+            )
+            .unwrap();
+            fetch(deps, &opts(&root, true, true)).remove(0)
+        };
+
+        let start = std::time::Instant::now();
+        let stalled = fetch_one(format!("{}/x", serve_stalled()), false);
+        assert!(stalled.failed(), "{stalled:?}");
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            start.elapsed()
+        );
+
+        let big = vec![b'0'; FETCH_MAX_BYTES as usize + 1];
+        let too_big = fetch_one(format!("{}/x", serve(big.clone(), "text/plain", 1)), false);
+        assert!(too_big.failed(), "{too_big:?}");
+
+        let bomb = tar_gz(&[("big.txt", std::str::from_utf8(&big).unwrap())]);
+        assert!(
+            (bomb.len() as u64) < FETCH_MAX_BYTES,
+            "the archive itself fits"
+        );
+        let unpacked = fetch_one(
+            format!("{}/x.tgz", serve(bomb, "application/gzip", 1)),
+            true,
+        );
+        assert!(unpacked.failed(), "{unpacked:?}");
+        assert!(
+            matches!(&unpacked.status, FetchStatus::Failed { error } if error.contains("larger than")),
+            "{unpacked:?}"
+        );
     }
 
     #[test]

@@ -263,10 +263,11 @@ These requirements describe the behaviour krab is meant to have. `main` does
 not meet them yet; the open deviations below say what it does instead.
 
 ```
-FET-29 HTTP downloads and registry requests MUST be bounded by a total
-       timeout and a size cap, also for decompressed data.
-       Test: none
-       Since: not met yet (#145)
+FET-29 HTTP downloads and registry requests MUST fail after 600 seconds
+       per request and above 1 GiB of body, and unpacking or decompressing
+       a downloaded archive MUST fail above 1 GiB of output (D26).
+       Test: crates/krab-compile/src/fetch.rs::http_downloads_are_bounded (partial: runs with test bounds of 2 s and 1 MiB; the OCI registry path and zip archives are not exercised)
+       Since: #296
 
 FET-30 Copying a fetched or extracted tree MUST NOT dereference symbolic
        links.
@@ -327,8 +328,10 @@ FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
   digest and platform and asks for a `@<digest>` pin.
 - FET-EC-6 An OCI bearer challenge without realm, or a scheme other than
   Basic and Bearer: the pull fails naming the registry.
-- FET-EC-7 A server that accepts the connection and then stalls: the compile
-  waits without limit (FET-29, open).
+- FET-EC-7 A server that accepts the connection and then stalls, or sends
+  more than the cap: the dependency fails with the limit in the message, and
+  the compile stops after the other groups finish, as for any failed fetch
+  (FET-29, FET-9).
 - FET-EC-8 An archive or artifact containing symbolic links: the copy step
   follows them (FET-30, open).
 - FET-EC-9 A run interrupted during a copy: the partly written destination
@@ -361,7 +364,6 @@ FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
 
 | Requirement | Issue | What `main` does |
 |---|---|---|
-| FET-29 | #145 | `download` (`fetch.rs:523`) and `Registry::new` (`oci.rs:254`) set only `timeout_connect(30s)`; bodies are read with `.limit(u64::MAX)` (`fetch.rs:543`, `oci.rs:294`); `unpack_file` and `tar_bytes` hold whole archives in memory. |
 | FET-30 | #146 | `safe_copy_tree` and `copy_tree` (`fetch.rs:1009-1047`) use `is_dir` and `std::fs::copy`, which follow links, so a link entry in an archive, repository or artifact copies the target's contents (or a whole directory) into the destination. |
 | FET-31 | #64 | `fetch_git` runs a full `git clone` per run. |
 | FET-32 | #217 | A forced copy copies dot entries too (`fetch.rs:505-508,1019-1021`): a `type: git` dependency without `subdir` leaves `.git` in the dependency path, which `git add` then treats as an embedded repository. |

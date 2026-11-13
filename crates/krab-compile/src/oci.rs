@@ -252,6 +252,7 @@ impl Registry {
             .tls_config(tls.build())
             .http_status_as_error(false)
             .timeout_connect(Some(Duration::from_secs(30)))
+            .timeout_global(Some(crate::fetch::FETCH_TIMEOUT))
             .user_agent(format!("kapitan/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .new_agent();
@@ -291,7 +292,7 @@ impl Registry {
         let body = resp
             .body_mut()
             .with_config()
-            .limit(u64::MAX)
+            .limit(crate::fetch::FETCH_MAX_BYTES)
             .read_to_vec()
             .map_err(|e| format!("{url}: {e}"))?;
         if !status.is_success() {
