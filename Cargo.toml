@@ -41,7 +41,6 @@ saphyr-parser = "0.0.12"
 indexmap = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-thiserror = "2"
 miette = { version = "7", features = ["fancy"] }
 clap = { version = "4", features = ["derive", "env", "wrap_help", "unstable-ext"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
@@ -51,7 +50,6 @@ sha2 = "0.10"
 md-5 = "0.11"
 notify = "8"
 notify-debouncer-full = "0.5"
-jmespath = "0.5"
 minijinja = { version = "2", features = ["loader", "builtins", "json", "preserve_order", "loop_controls"] }
 regex = "1"
 base64 = "0.22"

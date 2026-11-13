@@ -19,7 +19,6 @@ lsp-types = { workspace = true }
 url = { workspace = true }
 crossbeam-channel = { workspace = true }
 parking_lot = { workspace = true }
-tracing = { workspace = true }
 
 [lints]
 workspace = true

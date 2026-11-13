@@ -979,7 +979,7 @@ fn install(temp_target: &Path, final_dir: &Path, children: &[String]) -> std::io
     for entry in std::fs::read_dir(final_dir)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if children.contains(&name) || name == MANIFEST_FILE {
+        if children.contains(&name) {
             continue;
         }
         let p = entry.path();
