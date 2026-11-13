@@ -163,18 +163,9 @@ pub fn run(app: &App, args: CompileArgs) -> Result<(), Failure> {
         flags.push("--embed-refs".into());
     }
 
-    let labels: Vec<(String, String)> = args
-        .labels
-        .iter()
-        .map(|l| {
-            l.split_once('=')
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .ok_or_else(|| Failure::Message(format!("label `{l}` must be key=value")))
-        })
-        .collect::<Result<_, _>>()?;
     let selection = Selection {
         targets: args.targets.clone(),
-        labels,
+        labels: crate::cmd_inventory::parse_labels(&args.labels)?,
     };
     let refs_path = app
         .dot
