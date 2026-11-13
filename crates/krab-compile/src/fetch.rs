@@ -574,6 +574,7 @@ fn fetch_http(wanted: &[Wanted], save_dir: &Path, counter: &AtomicUsize) -> Grou
                 std::fs::create_dir_all(dest).map_err(|e| {
                     format!("Dependency {source}: cannot create {}: {e}", dest.display())
                 })?;
+                let mut warnings = vec![];
                 let unpacked = if w.force {
                     unpack_file(&file, dest, content_type.as_deref())?
                 } else {
@@ -584,12 +585,14 @@ fn fetch_http(wanted: &[Wanted], save_dir: &Path, counter: &AtomicUsize) -> Grou
                     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
                     let ok = unpack_file(&file, &tmp, content_type.as_deref())?;
                     if ok {
-                        safe_copy_tree(&tmp, dest).map_err(|e| {
+                        let mut links = vec![];
+                        safe_copy_tree(&tmp, dest, &mut links).map_err(|e| {
                             format!(
                                 "Dependency {source}: cannot copy to {}: {e}",
                                 dest.display()
                             )
                         })?;
+                        warnings.extend(links_warning(source, dest, &tmp, &links));
                     }
                     let _ = std::fs::remove_dir_all(&tmp);
                     ok
@@ -600,7 +603,7 @@ fn fetch_http(wanted: &[Wanted], save_dir: &Path, counter: &AtomicUsize) -> Grou
                         content_type.as_deref().unwrap_or("unknown")
                     ));
                 }
-                Ok(vec![])
+                Ok(warnings)
             } else {
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent).map_err(|e| {
@@ -760,7 +763,7 @@ fn fetch_helm(
             );
         }
         if std::fs::rename(&pulled, &cached).is_err()
-            && let Err(e) = copy_tree(&pulled, &cached)
+            && let Err(e) = copy_tree(&pulled, &cached, &mut vec![])
         {
             return all_failed(wanted, format!("{label}: cannot cache chart: {e}"));
         }
@@ -973,8 +976,9 @@ fn tar_bytes(bytes: &[u8]) -> Option<Vec<u8>> {
 
 /// kapitan `safe_copy_tree`: copy `src` into `dst` without overwriting any
 /// existing file and without copying entries whose name starts with `.`.
+/// Symbolic links are not copied but pushed to `links` (FET-30, D24).
 /// Returns how many files were copied.
-pub fn safe_copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
+pub fn safe_copy_tree(src: &Path, dst: &Path, links: &mut Vec<PathBuf>) -> std::io::Result<usize> {
     if !src.is_dir() {
         return Err(std::io::Error::other(format!(
             "Cannot copy tree {}: not a directory",
@@ -991,8 +995,11 @@ pub fn safe_copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
         }
         let from = entry.path();
         let to = dst.join(&name);
-        if from.is_dir() {
-            copied += safe_copy_tree(&from, &to)?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            links.push(from);
+        } else if kind.is_dir() {
+            copied += safe_copy_tree(&from, &to, links)?;
         } else if !to.is_file() {
             std::fs::copy(&from, &to)?;
             copied += 1;
@@ -1010,31 +1017,56 @@ fn copy_dependency(
     force: bool,
     source: &str,
 ) -> std::io::Result<Vec<String>> {
+    let mut links = vec![];
     if !force {
-        return safe_copy_tree(src, dest).map(|_| vec![]);
+        safe_copy_tree(src, dest, &mut links)?;
+        return Ok(links_warning(source, dest, src, &links)
+            .into_iter()
+            .collect());
     }
-    copy_tree(src, dest)?;
+    copy_tree(src, dest, &mut links)?;
+    let mut warnings: Vec<String> = links_warning(source, dest, src, &links)
+        .into_iter()
+        .collect();
     let mut skipped: Vec<String> = std::fs::read_dir(src)?
         .filter_map(|e| e.ok())
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .filter(|n| n.starts_with('.'))
         .collect();
     skipped.sort();
-    Ok(if skipped.is_empty() {
-        vec![]
-    } else {
-        vec![format!(
+    if !skipped.is_empty() {
+        warnings.push(format!(
             "Dependency {source}: not copied to {}: {} (a forced fetch skips dot entries too)",
             dest.display(),
             skipped.join(", ")
-        )]
-    })
+        ));
+    }
+    Ok(warnings)
+}
+
+/// The warning for symbolic links a copy left out (FET-30a): their paths
+/// relative to `root`, the tree that was copied.
+fn links_warning(source: &str, dest: &Path, root: &Path, links: &[PathBuf]) -> Option<String> {
+    if links.is_empty() {
+        return None;
+    }
+    let mut names: Vec<String> = links
+        .iter()
+        .map(|l| l.strip_prefix(root).unwrap_or(l).display().to_string())
+        .collect();
+    names.sort();
+    Some(format!(
+        "Dependency {source}: symbolic links not copied to {}: {} (krab does not follow links in fetched content)",
+        dest.display(),
+        names.join(", ")
+    ))
 }
 
 /// kapitan `copy_tree(clobber_files=True)`: copy everything except
 /// dot-entries (kapitan copies those too), replacing existing files.
+/// Symbolic links are not copied but pushed to `links` (FET-30, D24).
 /// Returns how many files were copied.
-pub fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
+pub fn copy_tree(src: &Path, dst: &Path, links: &mut Vec<PathBuf>) -> std::io::Result<usize> {
     if !src.is_dir() {
         return Err(std::io::Error::other(format!(
             "Cannot copy tree {}: not a directory",
@@ -1056,8 +1088,11 @@ pub fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<usize> {
         }
         let from = entry.path();
         let to = dst.join(entry.file_name());
-        if from.is_dir() {
-            copied += copy_tree(&from, &to)?;
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            links.push(from);
+        } else if kind.is_dir() {
+            copied += copy_tree(&from, &to, links)?;
         } else {
             if to.is_file() {
                 // Read-only files (git pack files) cannot be overwritten in place.
@@ -1208,15 +1243,42 @@ mod tests {
         write(&src.join("sub/b.txt"), "b");
         write(&src.join(".git/HEAD"), "ref");
         write(&dst.join("a.txt"), "old");
-        assert_eq!(safe_copy_tree(&src, &dst).unwrap(), 1);
+        assert_eq!(safe_copy_tree(&src, &dst, &mut vec![]).unwrap(), 1);
         assert_eq!(read(&dst.join("a.txt")), "old");
         assert_eq!(read(&dst.join("sub/b.txt")), "b");
         assert!(!dst.join(".git").exists());
 
-        assert_eq!(copy_tree(&src, &dst).unwrap(), 2);
+        assert_eq!(copy_tree(&src, &dst, &mut vec![]).unwrap(), 2);
         assert_eq!(read(&dst.join("a.txt")), "new");
         assert!(!dst.join(".git").exists());
-        assert!(copy_tree(&src.join("a.txt"), &dst).is_err());
+        assert!(copy_tree(&src.join("a.txt"), &dst, &mut vec![]).is_err());
+    }
+
+    /// Neither copy follows a link to a file or to a directory; both name
+    /// the links they leave out (FET-30).
+    #[test]
+    fn copies_leave_symbolic_links_out() {
+        let dir = tmp("copy-links");
+        let (src, outside) = (dir.join("src"), dir.join("outside"));
+        write(&src.join("a.txt"), "a");
+        write(&outside.join("secret.txt"), "s");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::os::unix::fs::symlink(outside.join("secret.txt"), src.join("file-link")).unwrap();
+        std::os::unix::fs::symlink(&outside, src.join("sub/dir-link")).unwrap();
+        for force in [false, true] {
+            let dst = dir.join(format!("dst-{force}"));
+            let mut links = vec![];
+            let copied = if force {
+                copy_tree(&src, &dst, &mut links)
+            } else {
+                safe_copy_tree(&src, &dst, &mut links)
+            };
+            assert_eq!(copied.unwrap(), 1, "force={force}");
+            assert!(dst.join("file-link").symlink_metadata().is_err());
+            assert!(dst.join("sub/dir-link").symlink_metadata().is_err());
+            links.sort();
+            assert_eq!(links, [src.join("file-link"), src.join("sub/dir-link")]);
+        }
     }
 
     fn tar_gz(files: &[(&str, &str)]) -> Vec<u8> {
@@ -1393,6 +1455,47 @@ mod tests {
             "{:?}",
             out[0].warnings
         );
+    }
+
+    /// A symbolic link in fetched content is left out of the copy, forced or
+    /// not, and named once (#146): copying it would copy whatever it points at.
+    #[test]
+    fn fetched_symbolic_links_are_left_out_and_reported() {
+        for force in [false, true] {
+            let dir = tmp(&format!("git-symlink-{force}"));
+            let secret = dir.join("secret.txt");
+            write(&secret, "do not copy");
+            let origin = dir.join("origin");
+            let source = make_repo(&origin);
+            std::os::unix::fs::symlink(&secret, origin.join("creds")).unwrap();
+            git_ok(&["add", "."], &origin);
+            git_ok(&["commit", "-q", "-m", "link"], &origin);
+            let root = dir.join("repo");
+            std::fs::create_dir_all(&root).unwrap();
+            let deps = dependencies(
+                "t",
+                &json!([{"type": "git", "source": source, "output_path": "vendor/lib"}]),
+                &root,
+            )
+            .unwrap();
+            let out = fetch(deps, &opts(&root, true, force));
+            assert!(
+                matches!(out[0].status, FetchStatus::Fetched { .. }),
+                "{out:?}"
+            );
+            assert_eq!(read(&root.join("vendor/lib/top.txt")), "top");
+            assert!(
+                root.join("vendor/lib/creds").symlink_metadata().is_err(),
+                "force={force}: the link or its target was copied"
+            );
+            let links: Vec<&String> = out[0]
+                .warnings
+                .iter()
+                .filter(|w| w.contains("symbolic link"))
+                .collect();
+            assert_eq!(links.len(), 1, "force={force}: {:?}", out[0].warnings);
+            assert!(links[0].contains("creds"), "{}", links[0]);
+        }
     }
 
     #[test]

@@ -269,9 +269,14 @@ FET-29 HTTP downloads and registry requests MUST be bounded by a total
        Since: not met yet (#145)
 
 FET-30 Copying a fetched or extracted tree MUST NOT dereference symbolic
-       links.
-       Test: none
-       Since: not met yet (#146)
+       links. Links are left out of the copy (D24).
+       Test: crates/krab-compile/src/fetch.rs::copies_leave_symbolic_links_out, crates/krab-compile/src/fetch.rs::fetched_symbolic_links_are_left_out_and_reported
+       Since: #294
+
+FET-30a The paths of the links left out MUST be reported once per
+       dependency and destination.
+       Test: crates/krab-compile/src/fetch.rs::fetched_symbolic_links_are_left_out_and_reported (partial: the http unpack path is not exercised)
+       Since: #294
 
 FET-31 A `git` fetch SHOULD NOT transfer the repository's full history
        when a ref or subdir is all it needs.
@@ -329,8 +334,10 @@ FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
   Basic and Bearer: the pull fails naming the registry.
 - FET-EC-7 A server that accepts the connection and then stalls: the compile
   waits without limit (FET-29, open).
-- FET-EC-8 An archive or artifact containing symbolic links: the copy step
-  follows them (FET-30, open).
+- FET-EC-8 An archive, repository or artifact containing symbolic links:
+  the copy step leaves them out and reports their paths (FET-30). A forced
+  `http` fetch with `unpack` extracts straight into the destination, without
+  a copy step, so links in the archive arrive there as links.
 - FET-EC-9 A run interrupted during a copy: the partly written destination
   exists, so the next unforced run skips it (FET-5) and --force-fetch is
   needed to repair it. The temporary directory stays behind.
@@ -362,6 +369,5 @@ FET-32 A forced copy MUST skip entries whose name starts with `.`, as an
 | Requirement | Issue | What `main` does |
 |---|---|---|
 | FET-29 | #145 | `download` (`fetch.rs:523`) and `Registry::new` (`oci.rs:254`) set only `timeout_connect(30s)`; bodies are read with `.limit(u64::MAX)` (`fetch.rs:543`, `oci.rs:294`); `unpack_file` and `tar_bytes` hold whole archives in memory. |
-| FET-30 | #146 | `safe_copy_tree` and `copy_tree` (`fetch.rs:1009-1047`) use `is_dir` and `std::fs::copy`, which follow links, so a link entry in an archive, repository or artifact copies the target's contents (or a whole directory) into the destination. |
 | FET-31 | #64 | `fetch_git` runs a full `git clone` per run. |
 | FET-32 | #217 | A forced copy copies dot entries too (`fetch.rs:505-508,1019-1021`): a `type: git` dependency without `subdir` leaves `.git` in the dependency path, which `git add` then treats as an embedded repository. |

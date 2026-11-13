@@ -339,6 +339,9 @@ kapitan's `unpack_downloaded_file` does. Copying follows kapitan's
 `safe_copy_tree` (never overwrite, skip dot-entries) or, when forced,
 `copy_tree` (overwrite). kapitan's forced copy also copies dot-entries such
 as `.git`; krab skips them and warns with the top-level names it skipped.
+Neither copy follows symbolic links, which kapitan does: a link is left out
+and named in a warning, so an archive or repository cannot pull a local file
+into the destination (D24).
 Versioned helm charts are cached under
 `$XDG_CACHE_HOME/krab/charts` because a published chart version is
 immutable; `--force-fetch` pulls again.
