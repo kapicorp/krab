@@ -115,7 +115,7 @@ jobs:
           mkdir "$name"
           cp "target/$TARGET/release/krab" LICENSE README.md "$name/"
           tar czf "$name.tar.gz" "$name"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: krab-${{ matrix.target }}
           path: krab-*.tar.gz
@@ -129,7 +129,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.glibc && '2_17' || '' }}
           args: --release --locked --out wheels ${{ matrix.glibc && '--zig' || '' }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheel-${{ matrix.target }}
           path: wheels/*.whl
@@ -155,7 +155,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: npm run package
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: krab-vscode
           path: editors/vscode/*.vsix
