@@ -231,6 +231,12 @@ CLI-62 On a pull request each job in ci.yml MUST run only when the pull
        Test: ci.yml: changes
        Since: #260
 
+CLI-63 On a pull request the specs job MUST fail when the pull request
+       closes an issue that a requirement in docs/specs still cites as
+       `Since: not met yet (#issue)`.
+       Test: ci.yml: specs
+       Since: #291
+
 CLI-25 The lint job MUST run cargo fmt --all --check and cargo clippy
        --all-targets --locked with CARGO_BUILD_WARNINGS=deny, so that any
        compiler or clippy warning fails it.
@@ -278,8 +284,8 @@ CLI-32 The vscode job MUST run npm ci and npm run package in editors/vscode
        Since: #72
 
 CLI-33 The job "CI passed" MUST depend on changes, lint, test, parity, msrv,
-       deny, zizmor and vscode, run even when one of them failed, and fail unless
-       every result is success or skipped.
+       deny, zizmor, vscode and specs, run even when one of them failed,
+       and fail unless every result is success or skipped.
        Test: ci.yml: required
        Since: #107
 
@@ -644,6 +650,7 @@ markdown file in the tree.
 | deny | `^(Cargo\.(toml\|lock)\|deny\.toml\|crates/[^/]+/Cargo\.toml)$` |
 | zizmor | `^\.github/` |
 | vscode | `^editors/vscode/` |
+| specs | every pull request, because it reads the issues the pull request closes, not its paths (CLI-63) |
 
 ### Required check
 

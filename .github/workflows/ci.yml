@@ -245,13 +245,51 @@ jobs:
           name: krab-vscode
           path: editors/vscode/*.vsix
 
+  specs:
+    # A pull request that closes an issue a spec still cites as not met has
+    # to update that requirement (CLI-63). Runs on every pull request: its
+    # input is the issues the pull request closes, not the paths it changes.
+    name: Spec status
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # closingIssuesReferences reads the pull request and the issues it links.
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: No closed issue is cited as not met
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          closes=$(gh api graphql \
+            -f query='query($owner: String!, $name: String!, $pr: Int!) {
+              repository(owner: $owner, name: $name) { pullRequest(number: $pr) {
+                closingIssuesReferences(first: 50) { nodes { number } } } } }' \
+            -f owner="${REPO%/*}" -f name="${REPO#*/}" -F pr="$PR" \
+            -q '.data.repository.pullRequest.closingIssuesReferences.nodes[].number')
+          echo "closes: ${closes:-nothing}"
+          status=0
+          for n in $closes; do
+            if grep -n -F "not met yet (#$n)" docs/specs/*.md; then
+              echo "::error::this pull request closes #$n, which the lines above still cite as not met. Give each requirement its Test: and Since:, and remove its Open deviations row."
+              status=1
+            fi
+          done
+          exit "$status"
+
   # Branch protection cannot require a job that is conditionally skipped, and
   # on a pull request every job but this one can be. Requiring this single check instead means a skipped job
   # passes and a failed or cancelled one does not.
   required:
     name: CI passed
     if: always()
-    needs: [changes, lint, test, parity, msrv, deny, zizmor, vscode]
+    needs: [changes, lint, test, parity, msrv, deny, zizmor, vscode, specs]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
