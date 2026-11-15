@@ -1,0 +1,5 @@
+# The image needs only the unpacked binaries and the two documents (Dockerfile).
+*
+!bin/
+!LICENSE
+!README.md
