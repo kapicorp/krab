@@ -634,14 +634,21 @@ before parsing arguments.
 | `krab-<version>-<target>.tar.gz` | directory `krab-<version>-<target>/` with `krab`, `LICENSE`, `README.md` |
 | `krab-vscode-<extension version>.vsix` | the VS Code extension |
 | `SHA256SUMS` | `sha256sum` output over every asset above |
-| `ghcr.io/kapicorp/krab:<version>` | container image for linux/amd64 and linux/arm64: Debian slim with `ca-certificates`, `git` and `gnupg`, `krab` in `/usr/local/bin`, user 999, entrypoint `krab`; `:latest` for releases without a pre-release suffix |
+| `ghcr.io/kapicorp/krab:<version>` | container image for linux/amd64 and linux/arm64: Debian slim with `ca-certificates`, `git`, `gnupg` and `python3`, a venv in `/opt/krab/python` with `kadet` and `jinja2` named by `KRAB_PYTHON`, `helm` from its release archive, `krab` in `/usr/local/bin`, user 999, entrypoint `krab`; `:latest` for releases without a pre-release suffix |
 
 The provenance of an archive is checked with
 `gh attestation verify <archive> --repo kapicorp/krab`, that of the image
 with `gh attestation verify oci://ghcr.io/kapicorp/krab:<version> --repo kapicorp/krab`.
 
 The image runs as user 999 because Argo CD runs config management plugins
-as that user. git serves git dependencies, gpg the `gpg` ref backend.
+as that user. git serves git dependencies, gpg the `gpg` ref backend, and
+helm the `helm` input. The venv holds the packages kadet evaluation needs
+(`BASELINE` in `crates/krab-compile/src/pyenv.rs`), installed when the image
+is built. `KRAB_PYTHON` makes krab use that interpreter as it is, so a
+compile installs nothing and the image runs with a read-only root
+filesystem. A repository that needs more Python packages
+(`compile.python-requirements`) builds an image of its own on top of this
+one.
 Building from the archives keeps the image's binary the one whose checksum
 is in `SHA256SUMS`.
 
