@@ -368,6 +368,15 @@ CLI-46 A manual run (workflow_dispatch) MUST build every artifact from the
        Test: none
        Since: #72
 
+CLI-63 The release MUST publish the container image ghcr.io/kapicorp/krab
+       for linux/amd64 and linux/arm64, tagged with the version, built
+       from the Linux archives of the same run without compiling again,
+       with a build provenance attestation (Sigstore, keyless) pushed to
+       the registry. The tag latest MUST only move for a tag without "-".
+       A manual run (CLI-46) MUST build the image without pushing it.
+       Test: none
+       Since: #318
+
 CLI-47 The release version MUST have one source, version in
        [workspace.package] of Cargo.toml. The binary reports it through
        CARGO_PKG_VERSION and the release workflow through cargo metadata.
@@ -625,9 +634,16 @@ before parsing arguments.
 | `krab-<version>-<target>.tar.gz` | directory `krab-<version>-<target>/` with `krab`, `LICENSE`, `README.md` |
 | `krab-vscode-<extension version>.vsix` | the VS Code extension |
 | `SHA256SUMS` | `sha256sum` output over every asset above |
+| `ghcr.io/kapicorp/krab:<version>` | container image for linux/amd64 and linux/arm64: Debian slim with `ca-certificates`, `git` and `gnupg`, `krab` in `/usr/local/bin`, user 999, entrypoint `krab`; `:latest` for releases without a pre-release suffix |
 
 The provenance of an archive is checked with
-`gh attestation verify <archive> --repo kapicorp/krab`.
+`gh attestation verify <archive> --repo kapicorp/krab`, that of the image
+with `gh attestation verify oci://ghcr.io/kapicorp/krab:<version> --repo kapicorp/krab`.
+
+The image runs as user 999 because Argo CD runs config management plugins
+as that user. git serves git dependencies, gpg the `gpg` ref backend.
+Building from the archives keeps the image's binary the one whose checksum
+is in `SHA256SUMS`.
 
 ### Job paths
 
