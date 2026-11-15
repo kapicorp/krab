@@ -163,7 +163,8 @@ templates and whatever the components themselves import); the Python
 kapitan itself is not. krab builds that environment for you: declare the
 components' own packages in `.kapitan` and the first compile creates a venv
 under `~/.cache/krab/python/` (with `uv` when installed, else `python3
--m venv` and pip) holding `kadet`, `jinja2` and them:
+-m venv` and pip) holding `kadet`, `jinja2`, `python-box` (in the range kapitan
+requires) and them:
 
 ```yaml
 compile:
@@ -177,7 +178,9 @@ alone. To try another kadet, or your own checkout, without touching the
 shared file, set `KRAB_PYTHON_REQUIREMENTS` (one specifier per line, for
 example `kadet==0.3.1` or `-e /home/me/kadet`); a `kadet` named there or in
 `.kapitan` replaces krab's own entry. `--python` / `$KRAB_PYTHON` name
-an interpreter to use as it is instead (nothing is installed into it). Nothing else is tried: an installed
+an interpreter to use as it is instead (nothing is installed into it). With a
+python-box newer than kapitan allows there, kadet output can differ from
+kapitan's (#320). Nothing else is tried: an installed
 Python kapitan plays no part in kadet evaluation. The component's
 `main()` runs in that Python with krab's own `kapitan` package on the path,
 which provides the API components import (`kapitan.inputs.kadet`,
