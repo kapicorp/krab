@@ -20,8 +20,9 @@
 //! `KRAB_PYTHON_REQUIREMENTS` adds specifiers for this machine only, one
 //! per line (`kadet==0.3.1`, `kadet @ file:///home/me/kadet`, or
 //! `-e /home/me/kadet` for an editable checkout), without touching the
-//! shared `.kapitan`. A `kadet` or `jinja2` named by either source replaces
-//! the baseline entry, so a pin or a checkout is the only one installed.
+//! shared `.kapitan`. A `kadet`, `jinja2` or `python-box` named by either
+//! source replaces the baseline entry, so a pin or a checkout is the only
+//! one installed.
 //!
 //! `--python` / `KRAB_PYTHON` bypass all of this: that interpreter is
 //! used as it is, and nothing else is ever tried (in particular not a
@@ -33,7 +34,10 @@ use std::process::Command;
 use krab_inventory::python::{PythonCmd, cache_dir, which};
 
 /// What every kadet evaluation needs, whatever the repository declares.
-pub const BASELINE: &[&str] = &["kadet", "jinja2"];
+/// python-box is held to the range kapitan 0.36.3 requires: from 8 on,
+/// `BoxList` copies the dicts it is built from, so a component's write to an
+/// element of `a + b` no longer reaches `a` (#320).
+pub const BASELINE: &[&str] = &["kadet", "jinja2", "python-box>=7.2.0,<8"];
 
 const MARKER: &str = ".krab-env.json";
 
@@ -124,7 +128,7 @@ impl PythonEnv {
             .collect();
         let mut out: Vec<String> = BASELINE
             .iter()
-            .filter(|b| !named.contains(&b.to_string()))
+            .filter(|b| project_name(b).is_none_or(|n| !named.contains(&n)))
             .map(|s| s.to_string())
             .collect();
         for r in self.requirements.iter().chain(&self.extra) {
@@ -332,7 +336,13 @@ mod tests {
         assert!(env.declared);
         assert_eq!(
             env.specifiers(),
-            vec!["kadet", "jinja2", "jmespath", "jsonpath-ng"]
+            vec![
+                "kadet",
+                "jinja2",
+                "python-box>=7.2.0,<8",
+                "jmespath",
+                "jsonpath-ng"
+            ]
         );
         assert!(env.requirements_file.is_none());
     }
@@ -356,18 +366,28 @@ mod tests {
 
     #[test]
     fn a_named_baseline_package_replaces_the_baseline_entry() {
-        let env = spec(Some(vec!["Kadet==0.3.1", "jinja2>=3"]));
-        assert_eq!(env.specifiers(), vec!["Kadet==0.3.1", "jinja2>=3"]);
+        let env = spec(Some(vec!["Kadet==0.3.1", "jinja2>=3", "python_box==7.4.1"]));
+        assert_eq!(
+            env.specifiers(),
+            vec!["Kadet==0.3.1", "jinja2>=3", "python_box==7.4.1"]
+        );
 
         let mut env = spec(None);
         env.extra = vec!["-e /home/me/kadet/".into()];
-        assert_eq!(env.specifiers(), vec!["jinja2", "-e /home/me/kadet/"]);
+        assert_eq!(
+            env.specifiers(),
+            vec!["jinja2", "python-box>=7.2.0,<8", "-e /home/me/kadet/"]
+        );
 
         let mut env = spec(None);
         env.extra = vec!["kadet @ file:///home/me/kadet".into()];
         assert_eq!(
             env.specifiers(),
-            vec!["jinja2", "kadet @ file:///home/me/kadet"]
+            vec![
+                "jinja2",
+                "python-box>=7.2.0,<8",
+                "kadet @ file:///home/me/kadet"
+            ]
         );
     }
 

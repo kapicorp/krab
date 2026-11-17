@@ -83,7 +83,7 @@ and network access for pip.
   `python3` with
 
   ```sh
-  pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2
+  pip install pyyaml "omegaconf==2.4.0.dev3" kadet jinja2 "python-box>=7.2.0,<8"
   ```
 
   Without them the tests pass without running and say why on stderr, which

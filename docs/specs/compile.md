@@ -354,14 +354,23 @@ CMP-43 Without one, kadet evaluation MUST use krab's managed environment: a
        Test: none
        Since: #91
 
-CMP-44 The managed environment MUST install `kadet` and `jinja2`, then the
-       entries of `compile.python-requirements`, then the lines of
-       `$KRAB_PYTHON_REQUIREMENTS`. A `kadet` or `jinja2` named in either
-       list replaces the baseline entry. A single
+CMP-44 The managed environment MUST install `kadet`, `jinja2` and
+       `python-box>=7.2.0,<8`, then the entries of
+       `compile.python-requirements`, then the lines of
+       `$KRAB_PYTHON_REQUIREMENTS`. A `kadet`, `jinja2` or `python-box` named
+       in either list replaces the baseline entry. A single
        `compile.python-requirements` value that is an existing file or ends
        in `.txt` is a requirements file.
-       Test: crates/krab-compile/src/pyenv.rs::tests::a_named_baseline_package_replaces_the_baseline_entry
-       Since: #91
+       Test: crates/krab-compile/src/pyenv.rs::tests::a_named_baseline_package_replaces_the_baseline_entry,
+             crates/krab-compile/tests/kadet_runner.rs::evaluates_a_component_without_the_python_kapitan
+             (the write to an element of `a + b`)
+       Since: #91, python-box range #321
+
+       The python-box range is the one kapitan 0.36.3 declares. python-box 8
+       copies the dicts a `BoxList` is built from, so a component that writes
+       to an element of `a + b` (the kubernetes generator's
+       `pod_spec.containers + pod_spec.initContainers`) loses the write, and
+       its output differs from kapitan's.
 
 CMP-45 `--backend python` MUST try, in order, `--python`/`$KRAB_PYTHON`, a
        kapitan PEX on PATH run with PEX_INTERPRETER=1, and `python3`, and

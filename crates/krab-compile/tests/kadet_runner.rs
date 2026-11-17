@@ -94,6 +94,10 @@ fn evaluates_a_component_without_the_python_kapitan() {
     assert_eq!(output["pruned"], json!({ "keep": 1, "nested": {} }));
     assert_eq!(output["targets"], json!(["app.api", "app.web"]));
     assert_eq!(output["params"], "plain");
+    assert_eq!(
+        output["pod"]["containers"],
+        json!([{ "name": "app", "securityContext": { "readOnlyRootFilesystem": true } }])
+    );
     let modules: Vec<&str> = output["kapitan_modules"]
         .as_array()
         .unwrap()
